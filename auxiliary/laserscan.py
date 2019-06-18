@@ -139,6 +139,7 @@ class LaserScan:
     # get angles of all points
     yaw = -np.arctan2(scan_y, scan_x)
     pitch = np.arcsin(scan_z / depth)
+    # TODO use array of hardcoded angles
     # np.nan_to_num(pitch, copy=False) # in case its divided by zero not needed
 
     # get projections in image coords
@@ -356,8 +357,9 @@ class SemLaserScan(LaserScan):
 class MultiSemLaserScan(SemLaserScan):
   """Class that contains multiple LaserScans with x,y,z,r,label,color_label",scan_index"""
 
-  def __init__(self, H, W, nclasses, color_dict=None):
+  def __init__(self, H, W, nclasses, adaption, color_dict=None):
     super(MultiSemLaserScan, self).__init__(H, W, nclasses, color_dict)
+    self.adaption = adaption
     self.reset()
     # self.scans
 
@@ -370,9 +372,13 @@ class MultiSemLaserScan(SemLaserScan):
       """
       self.reset()
       
+      # TODO use also previous scans
       for i in range(number_of_scans):
-        super(MultiSemLaserScan, self).open_scan_append(scan_names[idx+i], poses[idx+i], fov_up, fov_down)
-        super(MultiSemLaserScan, self).open_label_append(label_names[idx+i])
+        scan_idx = idx + i
+        # scan_idx = (idx + i) % len(scan_names)
+        # print(i, idx, scan_idx, len(scan_names))
+        super(MultiSemLaserScan, self).open_scan_append(scan_names[scan_idx], poses[scan_idx], fov_up, fov_down)
+        super(MultiSemLaserScan, self).open_label_append(label_names[scan_idx])
         super(MultiSemLaserScan, self).colorize()
       # print(len(self.points), "points")
 
@@ -382,9 +388,19 @@ class MultiSemLaserScan(SemLaserScan):
       t_points = np.matmul(np.linalg.inv(poses[idx]), hom_points.T).T
       self.points[:, 0:3] = t_points[:, 0:3]
 
-      # TODO different approach closest point, mesh, cat mesh
-
-      self.do_range_projection(fov_up, fov_down, remove=True)
-      self.do_label_projection()
+      # different approaches for point cloud adaption
+      if self.adaption == 'cp': # closest point
+        self.do_range_projection(fov_up, fov_down, remove=True)
+        self.do_label_projection()
+      elif self.adaption == 'mesh':
+        # TODO
+        quit()
+      elif self.adaption == 'catmesh':
+        # TODO
+        quit()
+      else:
+        # Error
+        print("\nAdaption method not recognized or not defined")
+        quit()
 
       # TODO export backprojected point cloud (+ range image)

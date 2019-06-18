@@ -234,31 +234,32 @@ if __name__ == '__main__':
   t_beams = target_config['beams'] # TODO change to more general description height?
   t_angle_res_hor = target_config['angle_res_hor']
   t_fov_hor = target_config['fov_hor']
-  t_W = int(fov_hor / angle_res_hor)
-  # adaption: ['mesh', 'catmesh', 'cp']
-
-  print("*" * 80)
-  print("TARGET:")
-  print("Name", t_name)
-  # print("Projection", projection)
-  print("Resolution", t_beams, "x", W)
-  print("FOV up", t_fov_up)
-  print("FOV down", t_fov_down)
-  print("*" * 80)
+  t_W = int(t_fov_hor / t_angle_res_hor)
+  adaption = 'cp' #['mesh', 'catmesh', 'cp']
 
   # TODO Expose parameter
   number_of_scans = 10
   # TODO Transformation parameter
 
+  print("*" * 80)
+  print("TARGET:")
+  print("Name", t_name)
+  # print("Projection", projection)
+  print("Resolution", t_beams, "x", t_W)
+  print("FOV up", t_fov_up)
+  print("FOV down", t_fov_down)
+  print("Aggregate", number_of_scans, "scans")
+  print("Adaption", adaption)
+  print("*" * 80)
+
   # create a scan
   color_dict = CFG["color_map"]
   nclasses = len(color_dict)
   scan = SemLaserScan(beams, W, nclasses, color_dict) # TODO pass transformation
-  scan2 = SemLaserScan(beams, W, nclasses, color_dict)
-  scans = MultiSemLaserScan(t_beams, t_W, nclasses, color_dict)
+  scans = MultiSemLaserScan(t_beams, t_W, nclasses, adaption, color_dict)
 
   # create a visualizer
-  vis = LaserScanVis(W=W, H=beams)
+  vis = LaserScanVis([W, t_W], [beams, t_beams])
 
   # print instructions
   print("To navigate:")
@@ -274,9 +275,6 @@ if __name__ == '__main__':
     scan.open_scan(scan_names[idx], fov_up, fov_down)
     scan.open_label(label_names[idx])
     scan.colorize()
-    scan2.open_scan(scan_names[idx], fov_up, fov_down)
-    scan2.open_label(label_names[idx])
-    scan2.colorize()
 
     # open multiple scans
     scans.open_multiple_scans(scan_names, label_names, poses, idx,
@@ -293,7 +291,8 @@ if __name__ == '__main__':
       if choice != "no":
         break
     if choice == "next":
-      idx = (idx + 1) % len(scan_names)
+      # take into account that we look further than one scan
+      idx = (idx + 1) % (len(scan_names) - number_of_scans)
       continue
     if choice == "back":
       idx -= 1

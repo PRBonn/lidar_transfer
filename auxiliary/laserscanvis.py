@@ -9,10 +9,10 @@ from matplotlib import pyplot as plt
 class LaserScanVis():
   """Class that creates and handles a visualizer for a pointcloud"""
 
-  def __init__(self, W=900, H=64):
+  def __init__(self, W, H):
     self.reset(W, H)
 
-  def reset(self, W=900, H=64):
+  def reset(self, W, H):
     """ Reset. """
     # last key press (it should have a mutex, but visualization is not
     # safety critical, so let's do things wrong)
@@ -34,7 +34,7 @@ class LaserScanVis():
 
     # new canvas for img
     self.img_canvas = SceneCanvas(
-        keys='interactive', show=True, size=(W, H), title='Original Range Image')
+        keys='interactive', show=True, size=(W[0], H[0]), title='Original Range Image')
     # interface (n next, b back, q quit, very simple)
     self.img_canvas.events.key_press.connect(self.key_press)
     # add a view for the depth
@@ -70,7 +70,7 @@ class LaserScanVis():
     visuals.XYZAxis(parent=self.back_view.scene)
 
     # new test canvas
-    self.test_canvas = SceneCanvas(keys='interactive', show=True, size=(W, H), title='Test Range Image')
+    self.test_canvas = SceneCanvas(keys='interactive', show=True, size=(W[1], H[1]), title='Test Range Image')
     # interface (n next, b back, q quit, very simple)
     self.test_canvas.events.key_press.connect(self.key_press)
     # add a view for the depth
