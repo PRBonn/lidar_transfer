@@ -9,16 +9,18 @@ Transfer semantic KITTI labeles into other dataset/sensor formats.
 - Deform datasets
 
 ## ToDo
-- [ ] Config files for different sensors/datasets
+- [x] Config files for different sensors/datasets
+    - [ ] source config withing dataset/sequence/00/config.yaml
+    - [ ] target config pass scanner.yaml as argument
 - [x] Tool to convert to KITTI structure
     - [x] nuscenes2kitti
     - [x] ford2kitti
     - [x] nclt2kitti
-- [ ] Visualize
+- [x] Visualize
 - [ ] Deformed
     - [ ] Closest point
     - [ ] Mesh
     - [ ] Categorie mesh
-    - [ ] use aggregated point cloud
+    - [x] use aggregated point cloud
 
 
