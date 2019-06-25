@@ -250,10 +250,11 @@ if __name__ == '__main__':
     t_beam_angles = []
 
   # Approach parameter
-  #['mesh', 'catmesh', 'cp']
-  adaption = CFG["adaption"]
+  adaption = CFG["adaption"]  #['mesh', 'catmesh', 'cp']
   number_of_scans = CFG["number_of_scans"]
-  # transformation = [1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1]
+  ignore_classes = CFG["ignore"]
+  moving_classes = CFG["moving"]
+  # transformation = CFG["transformation"]
 
   print("*" * 80)
   print("TARGET:")
@@ -264,13 +265,16 @@ if __name__ == '__main__':
   print("FOV down", t_fov_down)
   print("Aggregate", number_of_scans, "scans")
   print("Adaption", adaption)
+  print("Ignore classes", ignore_classes)
+  print("Moving classes", moving_classes)
   print("*" * 80)
 
   # create a scan
   color_dict = CFG["color_map"]
   nclasses = len(color_dict)
   scan = SemLaserScan(beams, W, nclasses, color_dict) # TODO pass transformation
-  scans = MultiSemLaserScan(t_beams, t_W, nclasses, adaption, color_dict)
+  scans = MultiSemLaserScan(t_beams, t_W, nclasses, adaption,
+                            ignore_classes, moving_classes, color_dict)
 
   # create a visualizer
   vis = LaserScanVis([W, t_W], [beams, t_beams])

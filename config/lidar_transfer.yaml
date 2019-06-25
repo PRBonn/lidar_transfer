@@ -2,7 +2,7 @@ transformation:
 adaption: 'cp'
 number_of_scans: 1
 
-remove: [0, 1]
+ignore: [0, 1]
 moving: [252, 253, 254, 255, 256, 257, 258, 259]
 labels: 
   0 : "unlabeled"

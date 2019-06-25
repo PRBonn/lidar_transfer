@@ -383,6 +383,8 @@ class SemLaserScan(LaserScan):
     """ Reset scan members. """
     super(SemLaserScan, self).reset()
     self.label = np.zeros((0, 1), dtype=np.float32)         # [m, 1]: label
+    self.label_image = np.zeros((0, 1), dtype=np.uint32)         # [m, 1]: label
+    self.label_color_image = np.zeros((0, 3), dtype=np.uint32)         # [m, 1]: label
     self.label_color = np.zeros((0, 3), dtype=np.float32)   # [m ,3]: color
     # projection color with labels
     self.proj_label = np.zeros((self.proj_H, self.proj_W),
@@ -511,9 +513,11 @@ class SemLaserScan(LaserScan):
 class MultiSemLaserScan(SemLaserScan):
   """Class that contains multiple LaserScans with x,y,z,r,label,color_label",scan_index"""
 
-  def __init__(self, H, W, nclasses, adaption, color_dict=None):
+  def __init__(self, H, W, nclasses, adaption, ignore_classes, moving_classes, color_dict=None):
     super(MultiSemLaserScan, self).__init__(H, W, nclasses, color_dict)
     self.adaption = adaption
+    self.ignore_classes = ignore_classes
+    self.moving_classes = moving_classes
     self.reset()
 
   def reset(self):
@@ -540,8 +544,7 @@ class MultiSemLaserScan(SemLaserScan):
 
           # remove moving classes from all but primary scan
           if i == 0:
-            # TODO expose to parameter
-            self.remove_classes((252, 253, 254, 255, 256, 257, 258, 259))
+            self.remove_classes(self.moving_classes)
             # print("clean classes before read in primary scan")
 
           super(MultiSemLaserScan, self).open_scan_append(scan_names[scan_idx], poses[scan_idx], fov_up, fov_down)
@@ -559,8 +562,7 @@ class MultiSemLaserScan(SemLaserScan):
       self.points[:, 0:3] = t_points[:, 0:3]
 
       # remove class unlabeled (0), outlier (1)
-      # TODO expose to parameter
-      self.remove_classes((0, 1))
+      self.remove_classes(self.ignore_classes)
 
       # different approaches for point cloud adaption
       if self.adaption == 'cp': # closest point
@@ -580,18 +582,28 @@ class MultiSemLaserScan(SemLaserScan):
 
   def write(self, out_dir, idx, range_image=False):
     # Only write back_points which are valid (not black)
-    back_points = self.back_points.reshape(-1,3)
+    back_points = self.back_points.reshape(-1, 3)
+    label_image = self.label_image.reshape(-1)
     index = self.index.reshape(-1,) > 0
     back_points = back_points[index]
+    label_image = label_image[index].astype(np.int32)
 
-    out_file = open(os.path.join(out_dir, "velodyne", str(idx).zfill(6)+".bin"), "wb")
+    scan_file = open(os.path.join(out_dir, "velodyne", str(idx).zfill(6)+".bin"), "wb")
     # print(self.points[0,0], self.points[1,0], self.points[2,0])
     for point in back_points:
         # print(point[0], point[1], point[2])
-        # Set remissions to zero
+        # Set remissions to zero!
         byte_values = struct.pack("ffff", point[0], point[1], point[2], 0.0)
-        out_file.write(byte_values)
-    out_file.close()
+        scan_file.write(byte_values)
+    scan_file.close()
+
+    # write labels
+    label_file = open(os.path.join(out_dir, "labels", str(idx).zfill(6)+".label"), "wb")
+    for label in label_image:
+      # print(label.dtype, label.shape, label.astype(np.int32))
+      byte_values = struct.pack("I", label)
+      label_file.write(byte_values)
+    label_file.close()
 
     if range_image:
       # TODO write range_image and label_image?

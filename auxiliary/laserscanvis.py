@@ -141,7 +141,7 @@ class LaserScanVis():
       # print(scan.label_color.shape)
       # back_points = hom_points[:, 0:3]
       # back_points[:,0] -=4
-      label_color = scan.label_image.reshape(-1,3)
+      label_color = scan.label_color_image.reshape(-1,3)
       points = scan.back_points.reshape(-1,3)
       self.back_vis.set_data(points,
                              face_color=label_color[..., ::-1],
