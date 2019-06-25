@@ -10,15 +10,15 @@ Transfer semantic KITTI labeles into other dataset/sensor formats.
 
 ## ToDo
 - [x] Config files for different sensors/datasets
-    - [ ] source config withing dataset/sequence/00/config.yaml
-    - [ ] target config pass scanner.yaml as argument
+    - [x] source config withing dataset/sequence/00/config.yaml
+    - [x] target config pass scanner.yaml as argument
 - [x] Tool to convert to KITTI structure
     - [x] nuscenes2kitti
     - [x] ford2kitti
     - [x] nclt2kitti
 - [x] Visualize
 - [ ] Deformed
-    - [ ] Closest point
+    - [x] Closest point
     - [ ] Mesh
     - [ ] Categorie mesh
     - [x] use aggregated point cloud

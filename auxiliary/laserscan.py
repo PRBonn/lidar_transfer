@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import numpy as np
+import os
+import struct
 import torch
 
 
@@ -16,6 +18,7 @@ class LaserScan:
     """ Reset scan members. """
     self.points = np.zeros((0, 3), dtype=np.float32)        # [m, 3]: x, y, z
     self.remissions = np.zeros((0, 1), dtype=np.float32)    # [m ,1]: remission
+    self.back_points = np.zeros((0, 3), dtype=np.float32)
 
     # a scan can also be represented as a spherical projection depth
     # image, and another channel which saves for each pixel, to which
@@ -128,8 +131,9 @@ class LaserScan:
     depth = np.linalg.norm(self.points, 2, axis=1)
     # remove points with depth == 0 to counter division by zero
     keep_index = (depth != 0)
-    depth = depth[keep_index]
-    self.points = self.points[keep_index]
+    if remove:
+      depth = depth[keep_index]
+      self.remove_points(keep_index)
 
     # get scan components
     scan_x = self.points[:, 0]
@@ -139,7 +143,9 @@ class LaserScan:
     # get angles of all points
     yaw = -np.arctan2(scan_y, scan_x)
     pitch = np.arcsin(scan_z / depth)
-    # TODO use array of hardcoded angles
+    # TODO find closest matching pitch angle in hardcoded beam angles
+    #      reject larger than abs(beam_angles[0]-beam_angles[1])/2
+    #      OR if beam_angles == [] use pitch angles
     # np.nan_to_num(pitch, copy=False) # in case its divided by zero not needed
 
     # get projections in image coords
@@ -192,6 +198,134 @@ class LaserScan:
     self.proj_remission[proj_y, proj_x] = remission
     self.proj_idx[proj_y, proj_x] = indices
     self.proj_mask = (self.proj_idx > 0).astype(np.float32)
+  def do_range_projection_new(self, fov_up, fov_down, remove=False):
+    """ Project a pointcloud into a spherical projection image.projection.
+        Function takes two arguments.
+    """
+    # laser parameters
+    fov_up = fov_up / 180.0 * np.pi      # field of view up in radians
+    fov_down = fov_down / 180.0 * np.pi  # field of view down in radians
+    fov = abs(fov_down) + abs(fov_up)  # get field of view total in radians
+
+    # get depth of all points
+    depth = np.linalg.norm(self.points, 2, axis=1)
+
+    # remove points with depth == 0 to counter division by zero
+    keep_index = (depth != 0)
+    depth = depth[keep_index]
+    self.remove_points(keep_index)
+
+    # get scan components
+    scan_x = self.points[:, 0]
+    scan_y = self.points[:, 1]
+    scan_z = self.points[:, 2]
+
+    # get angles of all points
+    yaw = -np.arctan2(scan_y, scan_x)
+    pitch = np.arcsin(scan_z / depth)
+    # TODO find closest matching pitch angle in hardcoded beam angles
+    #      reject larger than abs(beam_angles[0]-beam_angles[1])/2
+    #      OR if beam_angles == [] use pitch angles
+    # np.nan_to_num(pitch, copy=False) # in case its divided by zero not needed
+
+    # get projections in image coords
+    proj_x = 0.5 * (yaw / np.pi + 1.0)          # in [0.0, 1.0]
+    proj_y = 1.0 - (pitch + abs(fov_down)) / fov        # in [0.0, 1.0]
+    
+    # remove non-valid points
+    if remove:
+      min_value = np.argmin(proj_y)
+      # print("y", np.amin(proj_y), proj_y[min_value])
+      keep_index = (proj_y >= 0) & (proj_y <= 1)
+      self.remove_points(keep_index)
+      depth = depth[keep_index]
+      proj_y = proj_y[keep_index]
+      proj_x = proj_x[keep_index]
+      # print("y", np.amin(proj_y), proj_y[min_value])
+
+    # scale to image size using angular resolution
+    proj_x *= self.proj_W                              # in [0.0, W]
+    proj_y *= self.proj_H                              # in [0.0, H]
+    # round and clamp for use as index
+    proj_x_cl = np.floor(proj_x)
+    proj_x_cl = np.minimum(self.proj_W - 1, proj_x_cl)
+    proj_x_cl = np.maximum(0, proj_x_cl).astype(np.int32)   # in [0,W-1]
+    proj_y_cl = np.floor(proj_y)
+    proj_y_cl = np.minimum(self.proj_H - 1, proj_y_cl)
+    proj_y_cl = np.maximum(0, proj_y_cl).astype(np.int32)   # in [0,H-1]
+    # Index pointing to self.points row index
+    self.index = np.full((self.proj_H, self.proj_W), -1, dtype=np.int32)
+    
+    self.range_image = np.full((self.proj_H, self.proj_W), 0, dtype=np.float32)
+    self.dist_image = np.full((self.proj_H, self.proj_W), 1000, dtype=np.float32)
+    self.label_image = np.zeros((self.proj_H, self.proj_W, 3))
+
+    for i in range(len(proj_x)): # iterate all points
+      proj_y_i = proj_y_cl[i]
+      proj_x_i = proj_x_cl[i]
+      # With smallest distance the raster becomes more visible in the far points
+      dist = np.linalg.norm(np.array([proj_y[i], proj_x[i]]) - np.array([proj_y_i, proj_x_i]))
+      if dist < self.dist_image[proj_y_i, proj_x_i]:
+      # if depth[i] < self.range_image[proj_x_i, proj_y_i]:
+        self.dist_image[proj_y_i, proj_x_i] = dist
+        self.range_image[proj_y_i, proj_x_i] = depth[i]
+        self.index[proj_y_i, proj_x_i] = i
+        self.label_image[proj_y_i, proj_x_i] = self.label_color[i]
+
+    self.proj_y = proj_y_cl[self.index]
+    self.proj_x = proj_x_cl[self.index]
+
+    self.proj_range = self.range_image
+  def do_reverse_projection(self, fov_up, fov_down):
+    # laser parameters
+    fov_up = fov_up / 180.0 * np.pi      # field of view up in radians
+    fov_down = fov_down / 180.0 * np.pi  # field of view down in radians
+    fov = abs(fov_down) + abs(fov_up)    # get field of view total in radians
+
+    # 2D coordinates and depth
+    proj_x = self.proj_x[self.proj_idx] / self.proj_W
+    proj_y = self.proj_y[self.proj_idx] / self.proj_H
+    depth = self.depth[self.proj_idx]
+    self.label_color_back = self.label_color[self.proj_idx]
+
+    print("")
+    # print(self.proj_x[0:10,:])
+    print(self.proj_idx.shape)
+    # proj_x = np.tile(np.linspace(1, 900, num=900), (64, 1)).reshape(-1)
+    # proj_y = np.tile(np.linspace(1, 64, num=64), (900, 1)).reshape(-1)
+    print("depth", depth.shape)
+    print("proj_x", proj_x.shape)
+    print("proj_y", proj_y.shape)
+
+    # transform into 3D
+    yaw = (proj_x * 2 - 1.0) * np.pi # theta
+    pitch = np.pi/2 - (1.0 * fov - proj_y * fov - abs(fov_down)) # pitch = 90 - phi
+    point_x = depth * np.sin(pitch) * np.cos(-yaw)
+    point_y = depth * np.sin(pitch) * np.sin(-yaw)
+    point_z = depth * np.cos(pitch)
+
+    self.back_points = np.array([point_x, point_y, point_z]).transpose(1,2,0)
+
+  def do_reverse_projection_new(self, fov_up, fov_down):
+    # laser parameters
+    fov_up = fov_up / 180.0 * np.pi      # field of view up in radians
+    fov_down = fov_down / 180.0 * np.pi  # field of view down in radians
+    fov = abs(fov_down) + abs(fov_up)    # get field of view total in radians
+
+    # 2D coordinates and depth
+    depth = self.range_image
+    proj_x = self.proj_x / self.proj_W
+    proj_y = self.proj_y / self.proj_H
+
+    # transform into 3D
+    yaw = (proj_x * 2 - 1.0) * np.pi # theta
+    pitch = np.pi/2 - (1.0 * fov - proj_y * fov - abs(fov_down)) # pitch = 90 - phi
+    point_x = depth * np.sin(pitch) * np.cos(-yaw)
+    point_y = depth * np.sin(pitch) * np.sin(-yaw)
+    point_z = depth * np.cos(pitch)
+
+
+    self.back_points = np.array([point_x, point_y, point_z]).transpose(1,2,0).reshape(-1,3)
 
   def torch(self):
     # pass scan to pytorch in [3, m] shape (channel first)
@@ -337,6 +471,26 @@ class SemLaserScan(LaserScan):
     self.proj_label[mask] = self.label[self.proj_idx[mask]]
     self.proj_color[mask] = self.color_lut[self.label[self.proj_idx[mask]]]
 
+  def remove_classes(self, classes):
+    remove_index = np.full((len(self.points),), False)
+    for c in classes:
+      remove_index += self.label == c
+
+    # invert to get the keep index
+    keep_index = np.invert(remove_index)
+
+    # remove from all data variables
+    self.points = self.points[keep_index]
+    self.remissions = self.remissions[keep_index]
+    self.label = self.label[keep_index]
+    self.label_color = self.label_color[keep_index]
+
+  def do_label_projection_new(self):
+    # only map colors to labels that exist
+    mask = self.index >= 0
+    self.proj_label[mask] = self.label[self.index[mask]]
+    self.proj_color[mask] = self.color_lut[self.label[self.index[mask]]]
+
   def torch(self):
     super(SemLaserScan, self).torch()
     # pass label to pytorch in [1, m] shape (channel first)
@@ -361,7 +515,6 @@ class MultiSemLaserScan(SemLaserScan):
     super(MultiSemLaserScan, self).__init__(H, W, nclasses, color_dict)
     self.adaption = adaption
     self.reset()
-    # self.scans
 
   def reset(self):
     """ Reset scan members. """
@@ -372,15 +525,32 @@ class MultiSemLaserScan(SemLaserScan):
       """
       self.reset()
       
-      # TODO use also previous scans
-      for i in range(number_of_scans):
-        scan_idx = idx + i
-        # scan_idx = (idx + i) % len(scan_names)
-        # print(i, idx, scan_idx, len(scan_names))
-        super(MultiSemLaserScan, self).open_scan_append(scan_names[scan_idx], poses[scan_idx], fov_up, fov_down)
-        super(MultiSemLaserScan, self).open_label_append(label_names[scan_idx])
+      if number_of_scans > 1:
+        # use also previous scans
+        number_of_prev_scans = number_of_scans // 2
+        number_of_next_scans = number_of_scans - number_of_prev_scans
+        relative_idx = np.arange(-number_of_prev_scans, number_of_next_scans)
+
+        # move 0 to last in index to clean moving classes
+        relative_idx = np.delete(relative_idx, np.where(relative_idx == 0), 0)
+        relative_idx = np.append(relative_idx, 0)
+
+        for i in relative_idx:
+          scan_idx = idx + i
+
+          # remove moving classes from all but primary scan
+          if i == 0:
+            # TODO expose to parameter
+            self.remove_classes((252, 253, 254, 255, 256, 257, 258, 259))
+            # print("clean classes before read in primary scan")
+
+          super(MultiSemLaserScan, self).open_scan_append(scan_names[scan_idx], poses[scan_idx], fov_up, fov_down)
+          super(MultiSemLaserScan, self).open_label_append(label_names[scan_idx])
+          super(MultiSemLaserScan, self).colorize()
+      else:
+        super(MultiSemLaserScan, self).open_scan_append(scan_names[idx], poses[idx], fov_up, fov_down)
+        super(MultiSemLaserScan, self).open_label_append(label_names[idx])
         super(MultiSemLaserScan, self).colorize()
-      # print(len(self.points), "points")
 
       # After accumulating all scans then undo the pose and then do range projection
       hom_points = np.ones((self.points.shape[0], 4))
@@ -388,19 +558,41 @@ class MultiSemLaserScan(SemLaserScan):
       t_points = np.matmul(np.linalg.inv(poses[idx]), hom_points.T).T
       self.points[:, 0:3] = t_points[:, 0:3]
 
+      # remove class unlabeled (0), outlier (1)
+      # TODO expose to parameter
+      self.remove_classes((0, 1))
+
       # different approaches for point cloud adaption
       if self.adaption == 'cp': # closest point
-        self.do_range_projection(fov_up, fov_down, remove=True)
-        self.do_label_projection()
+        self.do_range_projection_new(fov_up, fov_down, remove=True)
+        self.do_label_projection_new()
+        self.do_reverse_projection_new(fov_up, fov_down)
       elif self.adaption == 'mesh':
-        # TODO
+        # TODO MESH
         quit()
       elif self.adaption == 'catmesh':
-        # TODO
+        # TODO Category Mesh
         quit()
       else:
         # Error
         print("\nAdaption method not recognized or not defined")
         quit()
 
-      # TODO export backprojected point cloud (+ range image)
+  def write(self, out_dir, idx, range_image=False):
+    # Only write back_points which are valid (not black)
+    back_points = self.back_points.reshape(-1,3)
+    index = self.index.reshape(-1,) > 0
+    back_points = back_points[index]
+
+    out_file = open(os.path.join(out_dir, "velodyne", str(idx).zfill(6)+".bin"), "wb")
+    # print(self.points[0,0], self.points[1,0], self.points[2,0])
+    for point in back_points:
+        # print(point[0], point[1], point[2])
+        # Set remissions to zero
+        byte_values = struct.pack("ffff", point[0], point[1], point[2], 0.0)
+        out_file.write(byte_values)
+    out_file.close()
+
+    if range_image:
+      # TODO write range_image and label_image?
+      print("Write range image")

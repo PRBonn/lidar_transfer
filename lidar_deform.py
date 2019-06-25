@@ -88,7 +88,7 @@ if __name__ == '__main__':
       '--config', '-c',
       type=str,
       required=False,
-      default="config/semantic-kitti.yaml",
+      default="config/lidar_transfer.yaml",
       help='Dataset config file. Defaults to %(default)s',
   )
   parser.add_argument(
@@ -110,6 +110,13 @@ if __name__ == '__main__':
       default=0,
       required=False,
       help='Sequence to start. Defaults to %(default)s',
+  )
+  parser.add_argument(
+      '--output', '-p',
+      type=str,
+      required=False,
+      default="output/",
+      help='Output folder to write bin files to. Defaults to %(default)s',
   )
   FLAGS, unparsed = parser.parse_known_args()
 
@@ -235,11 +242,18 @@ if __name__ == '__main__':
   t_angle_res_hor = target_config['angle_res_hor']
   t_fov_hor = target_config['fov_hor']
   t_W = int(t_fov_hor / t_angle_res_hor)
-  adaption = 'cp' #['mesh', 'catmesh', 'cp']
+  try:
+    t_beam_angles = target_config['beam_angles']
+    t_beam_angles.sort()
+  except Exception as e:
+    print("No beam angles in config: calculate equidistant angles")
+    t_beam_angles = []
 
-  # TODO Expose parameter
-  number_of_scans = 10
-  # TODO Transformation parameter
+  # Approach parameter
+  #['mesh', 'catmesh', 'cp']
+  adaption = CFG["adaption"]
+  number_of_scans = CFG["number_of_scans"]
+  # transformation = [1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1]
 
   print("*" * 80)
   print("TARGET:")
@@ -279,6 +293,10 @@ if __name__ == '__main__':
     # open multiple scans
     scans.open_multiple_scans(scan_names, label_names, poses, idx,
                               number_of_scans, t_fov_up, t_fov_down)
+
+    # Export backprojected point cloud (+ range image)
+    # TODO check folder existence earlier
+    scans.write(FLAGS.output, idx)
 
     # pass to visualizer
     vis.set_laserscan(scan)
