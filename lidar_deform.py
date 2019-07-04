@@ -4,7 +4,6 @@ import argparse
 import os
 import yaml
 import numpy as np
-# from auxiliary.laserscan import LaserScan, SemLaserScan
 from auxiliary.laserscan import LaserScan, SemLaserScan, MultiSemLaserScan
 from auxiliary.laserscanvis import LaserScanVis
 from auxiliary.progressbar import progressbar
@@ -65,12 +64,7 @@ def parse_poses(filename, calibration):
     cur_pose[2, 0:4] = values[8:12]
     cur_pose[3, 3] = 1.0
 
-    # cur_pose = np.matmul(Tr_inv, np.matmul(cur_pose, Tr))
     pose = cur_pose
-    # cur_pose = np.matmul(np.linalg.inv(cur_pose), pose)
-    # pose *= cur_pose
-
-    # poses.append(pose)
     poses.append(np.matmul(Tr_inv, np.matmul(pose, Tr)))
     i += 1
 
@@ -211,6 +205,11 @@ if __name__ == '__main__':
   beams = scan_config['beams'] # TODO change to more general description height?
   angle_res_hor = scan_config['angle_res_hor']
   fov_hor = scan_config['fov_hor']
+  try:
+    beam_angles = scan_config['beam_angles']
+    beam_angles.sort()
+  except Exception as e:
+    print("No beam angles in scan config: calculate equidistant angles")
   W = int(fov_hor / angle_res_hor)
 
   print("*" * 80)
@@ -220,6 +219,7 @@ if __name__ == '__main__':
   print("Resolution", beams, "x", W)
   print("FOV up", fov_up)
   print("FOV down", fov_down)
+  print("Beam angles", beam_angles)
   print("*" * 80)
 
   # read config.yaml of target dataset
@@ -246,15 +246,14 @@ if __name__ == '__main__':
     t_beam_angles = target_config['beam_angles']
     t_beam_angles.sort()
   except Exception as e:
-    print("No beam angles in config: calculate equidistant angles")
-    t_beam_angles = []
+    print("No beam angles in target config: calculate equidistant angles")
 
   # Approach parameter
   adaption = CFG["adaption"]  #['mesh', 'catmesh', 'cp']
   number_of_scans = CFG["number_of_scans"]
   ignore_classes = CFG["ignore"]
   moving_classes = CFG["moving"]
-  # transformation = CFG["transformation"]
+  transformation = CFG["transformation"]
 
   print("*" * 80)
   print("TARGET:")
@@ -263,7 +262,11 @@ if __name__ == '__main__':
   print("Resolution", t_beams, "x", t_W)
   print("FOV up", t_fov_up)
   print("FOV down", t_fov_down)
+  print("Beam angles", t_beam_angles)
+  print("*" * 80)
+  print("CONFIG:")
   print("Aggregate", number_of_scans, "scans")
+  print("Transformation", transformation)
   print("Adaption", adaption)
   print("Ignore classes", ignore_classes)
   print("Moving classes", moving_classes)
@@ -272,9 +275,10 @@ if __name__ == '__main__':
   # create a scan
   color_dict = CFG["color_map"]
   nclasses = len(color_dict)
-  scan = SemLaserScan(beams, W, nclasses, color_dict) # TODO pass transformation
+  scan = SemLaserScan(beams, W, nclasses, color_dict)
   scans = MultiSemLaserScan(t_beams, t_W, nclasses, adaption,
-                            ignore_classes, moving_classes, color_dict)
+                            ignore_classes, moving_classes, color_dict,
+                            transformation=transformation)
 
   # create a visualizer
   vis = LaserScanVis([W, t_W], [beams, t_beams])
