@@ -3,6 +3,7 @@ import numpy as np
 import os
 import struct
 import torch
+import auxiliary.fusion_lidar as fl
 
 
 class LaserScan:
