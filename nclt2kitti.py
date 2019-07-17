@@ -32,7 +32,7 @@ def convert(x_s, y_s, z_s):
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: ./nctl2kitty.py <input_dir> <output_dir> <scene_name>")
+        print("Usage: ./nclt2kitty.py <input_dir> <output_dir> <scene_name>")
         exit(1)
     
     # read parameter
