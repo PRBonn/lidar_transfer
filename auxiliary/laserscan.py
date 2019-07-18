@@ -612,7 +612,8 @@ class MultiSemLaserScan():
   """Class that contains multiple LaserScans with x,y,z,r,label,color_label",scan_index"""
 
   def __init__(self, H, W, nscans, nclasses, ignore_classes, moving_classes,
-               fov_up, fov_down, color_dict=None, transformation=None, beam_angles=None, voxel_size=0.1):
+               fov_up, fov_down, color_dict=None, transformation=None,
+               beam_angles=None, voxel_size=0.1, vol_bnds=None):
     self.H = H
     self.W = W
     self.nscans = nscans
@@ -622,6 +623,7 @@ class MultiSemLaserScan():
     self.fov_down = fov_down
     self.voxel_size = voxel_size
     self.poses = np.zeros((nscans, 4, 4), dtype=np.float32)
+    self.vol_bnds = vol_bnds
     
     self.scans = []
     for n in range(self.nscans):
@@ -654,15 +656,16 @@ class MultiSemLaserScan():
       # use also previous scans
       number_of_prev_scans = self.nscans // 2
       number_of_next_scans = self.nscans - number_of_prev_scans
-      # relative_idx = np.arange(-number_of_prev_scans, number_of_next_scans)
+      relative_idx = np.arange(-number_of_prev_scans, number_of_next_scans)
 
       # move 0 to last in index to clean moving classes
-      # relative_idx = np.delete(relative_idx, np.where(relative_idx == 0), 0)
+      relative_idx = np.delete(relative_idx, np.where(relative_idx == 0), 0)
       # relative_idx = np.append(relative_idx, 0)
-      # relative_idx = np.insert(relative_idx, 0, 0)
+      relative_idx = np.insert(relative_idx, 0, 0)
 
       for i, scan in enumerate(self.scans):
-        scan_idx = idx + i
+        scan_idx = idx + relative_idx[i]
+        print("Open scan %d/%d %d:%d"%(i+1,self.nscans, relative_idx[i], scan_idx))
         self.poses[i] = poses[scan_idx]
         scan.open_scan_append(scan_names[scan_idx], poses[scan_idx], self.fov_up, self.fov_down)
         scan.open_label_append(label_names[scan_idx])
@@ -700,14 +703,15 @@ class MultiSemLaserScan():
         scan.do_label_projection_new()
         scan.do_reverse_projection_new(self.fov_up, self.fov_down)
     elif adaption == 'mesh':
-      vol_bnds = np.array([[-30, 30], [-30, 30], [-3, 2]])
+      vol_bnds = self.vol_bnds
       # Automatically set voxel bounds by examining the complete point cloud
       if vol_bnds.all() == None:
         vol_bnds = np.zeros((3,2), dtype=np.int32)
         for scan in self.scans:
           bnds = scan.get_bnds()
           vol_bnds = np.concatenate((np.minimum(bnds[:,0],vol_bnds[:,0]).reshape(3,1),
-                                     np.maximum(bnds[:,1],vol_bnds[:,1]).reshape(3,1)),axis=1)
+                                     np.maximum(bnds[:,1],vol_bnds[:,1]).reshape(3,1)),
+                                     axis=1)
       # TODO Fix mesh with one scan
       # print("Create range images...")
       for i, scan in enumerate(self.scans):
@@ -722,11 +726,11 @@ class MultiSemLaserScan():
         scan.do_label_projection_new()
         # scan.do_reverse_projection_new(self.fov_up, self.fov_down)
 
-      # TODO Option to set the voxel dims manually
       # TODO Limit range of scans
       print("Initializing voxel volume...")
       tsdf_vol = fl.TSDFVolume(vol_bnds, voxel_size=self.voxel_size, fov_up=self.fov_up, fov_down=self.fov_down)
 
+      # TODO Add BVH to speed up raytracing
       t0_elapse = time.time()
       for i, scan in enumerate(self.scans):
         print("Fusing scan %d/%d"%(i+1,self.nscans))
@@ -741,6 +745,7 @@ class MultiSemLaserScan():
       rays = self.create_rays()
       origin = np.array([0, 0, 0])
       self.ray_endpoints, self.ray_colors = tsdf_vol.throw_rays_at_mesh(rays, origin, self.H, self.W)
+      print("Done")
     elif adaption == 'catmesh':
       # TODO Category Mesh
       quit()

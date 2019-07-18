@@ -249,6 +249,7 @@ if __name__ == '__main__':
   # Approach parameter
   adaption = CFG["adaption"]  #['mesh', 'catmesh', 'cp']
   voxel_size = CFG["voxel_size"]
+  voxel_bounds = np.array(CFG["voxel_bounds"])
   nscans = CFG["number_of_scans"]
   ignore_classes = CFG["ignore"]
   moving_classes = CFG["moving"]
@@ -268,6 +269,7 @@ if __name__ == '__main__':
   print("Transformation", transformation)
   print("Adaption", adaption)
   print("Voxel size", voxel_size)
+  print("Voxel bounds", voxel_bounds)
   print("Ignore classes", ignore_classes)
   print("Moving classes", moving_classes)
   print("*" * 80)
@@ -277,8 +279,10 @@ if __name__ == '__main__':
   nclasses = len(color_dict)
   scan = SemLaserScan(beams, W, nclasses, color_dict)
   scans = MultiSemLaserScan(t_beams, t_W, nscans, nclasses,
-                            ignore_classes, moving_classes, t_fov_up, t_fov_down, color_dict,
-                            transformation=transformation, voxel_size=voxel_size)
+                            ignore_classes, moving_classes,
+                            t_fov_up, t_fov_down, color_dict,
+                            transformation=transformation,
+                            voxel_size=voxel_size, vol_bnds=voxel_bounds.reshape(3,2))
 
   # create a visualizer
   vis = LaserScanVis([W, t_W], [beams, t_beams])
