@@ -248,7 +248,8 @@ if __name__ == '__main__':
 
   # Approach parameter
   adaption = CFG["adaption"]  #['mesh', 'catmesh', 'cp']
-  number_of_scans = CFG["number_of_scans"]
+  voxel_size = CFG["voxel_size"]
+  nscans = CFG["number_of_scans"]
   ignore_classes = CFG["ignore"]
   moving_classes = CFG["moving"]
   transformation = CFG["transformation"]
@@ -263,9 +264,10 @@ if __name__ == '__main__':
   print("Beam angles", t_beam_angles)
   print("*" * 80)
   print("CONFIG:")
-  print("Aggregate", number_of_scans, "scans")
+  print("Aggregate", nscans, "scans")
   print("Transformation", transformation)
   print("Adaption", adaption)
+  print("Voxel size", voxel_size)
   print("Ignore classes", ignore_classes)
   print("Moving classes", moving_classes)
   print("*" * 80)
@@ -274,9 +276,9 @@ if __name__ == '__main__':
   color_dict = CFG["color_map"]
   nclasses = len(color_dict)
   scan = SemLaserScan(beams, W, nclasses, color_dict)
-  scans = MultiSemLaserScan(t_beams, t_W, nclasses, adaption,
-                            ignore_classes, moving_classes, color_dict,
-                            transformation=transformation)
+  scans = MultiSemLaserScan(t_beams, t_W, nscans, nclasses,
+                            ignore_classes, moving_classes, t_fov_up, t_fov_down, color_dict,
+                            transformation=transformation, voxel_size=voxel_size)
 
   # create a visualizer
   vis = LaserScanVis([W, t_W], [beams, t_beams])
@@ -295,17 +297,28 @@ if __name__ == '__main__':
     scan.colorize()
 
     # open multiple scans
-    scans.open_multiple_scans(scan_names, label_names, poses, idx,
-                              number_of_scans, t_fov_up, t_fov_down)
+    scans.open_multiple_scans(scan_names, label_names, poses, idx)
+
+    scans.deform(adaption, poses, idx)
 
     # Export backprojected point cloud (+ range image)
     # TODO check folder existence earlier
-    scans.write(FLAGS.output, idx)
+    # scans.write(FLAGS.output, idx)
 
     # pass to visualizer
     vis.set_laserscan(scan)
     # vis.set_laserscan2(scan2)
-    vis.set_laserscan2(scans, poses[idx])
+    if adaption == 'cp': # closest point
+      vis.set_laserscans(scans, poses[idx])
+    elif adaption == 'mesh':
+      vis.set_points(scans.ray_endpoints, scans.ray_colors)
+    elif adaption == 'catmesh':
+      # TODO Category Mesh
+      quit()
+    else:
+      # Error
+      print("\nAdaption method not recognized or not defined")
+      quit()
 
     # get user choice
     while True:
@@ -314,7 +327,7 @@ if __name__ == '__main__':
         break
     if choice == "next":
       # take into account that we look further than one scan
-      idx = (idx + 1) % (len(scan_names) - number_of_scans)
+      idx = (idx + 1) % (len(scan_names) - nscans)
       continue
     if choice == "back":
       idx -= 1

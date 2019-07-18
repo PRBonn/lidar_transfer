@@ -181,6 +181,31 @@ class LaserScanVis():
       self.test_vis.set_data(data)
     self.test_vis.update()
 
+  def set_points(self, points, colors):
+    # plot range
+    colors = colors/255
+    self.back_vis.set_data(points,
+                            face_color=colors,
+                            edge_color=colors,
+                            size=3)
+    self.back_vis.update()
+
+    # plot range image test
+    # if hasattr(scan.get_scan(2), 'proj_color'):
+    #   self.test_vis.set_data(scan.get_scan(2).proj_color[..., ::-1])
+    # else:
+    #   # print()
+    #   data = np.copy(scan.get_scan(2).proj_range)
+    #   # print(data[data > 0].max(), data[data > 0].min())
+    #   data[data > 0] = data[data > 0]**(1 / power)
+    #   data[data < 0] = data[data > 0].min()
+    #   # print(data.max(), data.min())
+    #   data = (data - data[data > 0].min()) / \
+    #       (data.max() - data[data > 0].min())
+    #   # print(data.max(), data.min())
+    #   self.test_vis.set_data(data)
+    # self.test_vis.update()
+
   # interface
   def key_press(self, event):
     if event.key == 'N':

@@ -22,5 +22,3 @@ Transfer semantic KITTI labeles into other dataset/sensor formats.
     - [ ] Mesh
     - [ ] Categorie mesh
     - [x] use aggregated point cloud
-
-

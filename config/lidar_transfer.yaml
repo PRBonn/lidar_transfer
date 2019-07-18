@@ -1,7 +1,7 @@
-transformation:
 transformation: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
-adaption: 'cp'
+adaption: 'mesh'
 number_of_scans: 1
+voxel_size: 0.5
 
 ignore: [0, 1]
 moving: [252, 253, 254, 255, 256, 257, 258, 259]
