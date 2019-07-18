@@ -77,7 +77,7 @@ class LaserScan:
     t_points = np.matmul(self.transformation, t_points).T
 
     # TODO no pose adaption on import or remove it from tsdf
-    t_points = scan[:, 0:3]
+    # t_points = scan[:, 0:3]
 
     # put in attribute
     if self.points.size == 0:
@@ -646,120 +646,129 @@ class MultiSemLaserScan():
     return points, label_color
 
   def open_multiple_scans(self, scan_names, label_names, poses, idx):
-      """ Open multiple raw scan and fill in attributes
-      """
-      self.reset()
+    """ Open multiple raw scan and fill in attributes
+    """
+    self.reset()
       
     if self.nscans > 1:
-        # use also previous scans
+      # use also previous scans
       number_of_prev_scans = self.nscans // 2
       number_of_next_scans = self.nscans - number_of_prev_scans
-        relative_idx = np.arange(-number_of_prev_scans, number_of_next_scans)
+      # relative_idx = np.arange(-number_of_prev_scans, number_of_next_scans)
 
-        # move 0 to last in index to clean moving classes
+      # move 0 to last in index to clean moving classes
       # relative_idx = np.delete(relative_idx, np.where(relative_idx == 0), 0)
       # relative_idx = np.append(relative_idx, 0)
+      # relative_idx = np.insert(relative_idx, 0, 0)
 
       for i, scan in enumerate(self.scans):
-          scan_idx = idx + i
+        scan_idx = idx + i
         self.poses[i] = poses[scan_idx]
-        scan.open_scan_append(scan_names[scan_idx], scan_idx, poses[scan_idx], self.fov_up, self.fov_down)
+        scan.open_scan_append(scan_names[scan_idx], poses[scan_idx], self.fov_up, self.fov_down)
         scan.open_label_append(label_names[scan_idx])
         scan.colorize()
 
           # remove moving classes from all but primary scan
-        if relative_idx[i] != 0:
+        if i != 0:
           scan.remove_classes(self.moving_classes)
 
         # remove class unlabeled (0), outlier (1)
         scan.remove_classes(self.ignore_classes)
         
       else:  # use a single scan
-      self.scans[0].open_scan_append(scan_names[idx], idx, poses[idx], self.fov_up, self.fov_down)
-      self.scans[0].open_label_append(label_names[idx])
-      self.scans[0].colorize()
+        self.scans[0].open_scan_append(scan_names[idx], poses[idx], self.fov_up, self.fov_down)
+        self.scans[0].open_label_append(label_names[idx])
+        self.scans[0].colorize()
 
   def deform(self, adaption, poses, idx):
-      """ Deforms laserscan with specified adaption method and transformation
-      """
-      # assert(self.scan_idx.shape[0] == self.points.shape[0])
-      # assert(self.label.shape[0] == self.points.shape[0])
+    """ Deforms laserscan with specified adaption method and transformation
+    """
+    # assert(self.scan_idx.shape[0] == self.points.shape[0])
+    # assert(self.label.shape[0] == self.points.shape[0])
 
-      # different approaches for point cloud adaption
-      if adaption == 'cp': # closest point
+    # different approaches for point cloud adaption
+    if adaption == 'cp': # closest point
+      for scan in self.scans:
+        # After accumulating all scans then undo the pose and then do range projection
+        hom_points = np.ones((scan.points.shape[0], 4))
+        hom_points[:, 0:3] = scan.points[:, 0:3]
+        t_points = np.matmul(np.linalg.inv(poses[idx]), hom_points.T).T
+        scan.points[:, 0:3] = t_points[:, 0:3]
+        # TODO merge point cloud then do projection and reverse projection
+
+        scan.do_range_projection_new(self.fov_up, self.fov_down, remove=True)
+        scan.do_label_projection_new()
+        scan.do_reverse_projection_new(self.fov_up, self.fov_down)
+    elif adaption == 'mesh':
+      vol_bnds = np.array([[-30, 30], [-30, 30], [-3, 2]])
+      # Automatically set voxel bounds by examining the complete point cloud
+      if vol_bnds.all() == None:
+        vol_bnds = np.zeros((3,2), dtype=np.int32)
         for scan in self.scans:
-      # After accumulating all scans then undo the pose and then do range projection
-          hom_points = np.ones((scan.points.shape[0], 4))
-          hom_points[:, 0:3] = scan.points[:, 0:3]
-      t_points = np.matmul(np.linalg.inv(poses[idx]), hom_points.T).T
-          scan.points[:, 0:3] = t_points[:, 0:3]
-          # TODO merge point cloud then do projection and reverse projection
+          bnds = scan.get_bnds()
+          vol_bnds = np.concatenate((np.minimum(bnds[:,0],vol_bnds[:,0]).reshape(3,1),
+                                     np.maximum(bnds[:,1],vol_bnds[:,1]).reshape(3,1)),axis=1)
+      # TODO Fix mesh with one scan
+      # print("Create range images...")
+      for i, scan in enumerate(self.scans):
+        print("Create range image %d/%d"%(i+1,self.nscans))
+        # After accumulating all scans then undo the pose and then do range projection
+        hom_points = np.ones((scan.points.shape[0], 4))
+        hom_points[:, 0:3] = scan.points[:, 0:3]
+        t_points = np.matmul(np.linalg.inv(poses[idx]), hom_points.T).T
+        scan.points[:, 0:3] = t_points[:, 0:3]
 
-          scan.do_range_projection_new(self.fov_up, self.fov_down, remove=True)
-          scan.do_label_projection_new()
-          scan.do_reverse_projection_new(self.fov_up, self.fov_down)
-      elif adaption == 'mesh':
-        vol_bnds = None
-        # Automatically set voxel bounds by examining the complete point cloud
-        if vol_bnds == None:
-          vol_bnds = np.zeros((3,2), dtype=np.int32)
-          for scan in self.scans:
-            bnds = scan.get_bnds()
-            vol_bnds = np.concatenate((np.minimum(bnds[:,0],vol_bnds[:,0]).reshape(3,1),
-                                       np.maximum(bnds[:,1],vol_bnds[:,1]).reshape(3,1)),axis=1)
+        scan.do_range_projection_new(self.fov_up, self.fov_down, remove=True)
+        scan.do_label_projection_new()
+        # scan.do_reverse_projection_new(self.fov_up, self.fov_down)
 
-        # print("Create range images...")
-        for i, scan in enumerate(self.scans):
-          print("Create range image %d/%d"%(i+1,self.nscans))
-          scan.do_range_projection_new(self.fov_up, self.fov_down, remove=True)
-          scan.do_label_projection_new()
-          # scan.do_reverse_projection_new(self.fov_up, self.fov_down)
+      # TODO Option to set the voxel dims manually
+      # TODO Limit range of scans
+      print("Initializing voxel volume...")
+      tsdf_vol = fl.TSDFVolume(vol_bnds, voxel_size=self.voxel_size, fov_up=self.fov_up, fov_down=self.fov_down)
 
-        # TODO Option to set the voxel dims manually
-        # TODO Limit range of scans
-        print("Initializing voxel volume...")
-        tsdf_vol = fl.TSDFVolume(vol_bnds, voxel_size=self.voxel_size, fov_up=self.fov_up, fov_down=self.fov_down)
+      t0_elapse = time.time()
+      for i, scan in enumerate(self.scans):
+        print("Fusing scan %d/%d"%(i+1,self.nscans))
+        # scan.do_range_projection_new(self.fov_up, self.fov_down, remove=True)
+        # scan.do_label_projection_new()
+        # scan.do_reverse_projection_new(self.fov_up, self.fov_down)
+        tsdf_vol.integrate(scan.proj_color*255, scan.proj_range, self.poses[i], obs_weight=1.)
+      fps = self.nscans/(time.time()-t0_elapse)
+      print("Average FPS: %.2f"%(fps))
 
-        t0_elapse = time.time()
-        for i, scan in enumerate(self.scans):
-          print("Fusing scan %d/%d"%(i+1,self.nscans))
-          # scan.do_range_projection_new(self.fov_up, self.fov_down, remove=True)
-          # scan.do_label_projection_new()
-          # scan.do_reverse_projection_new(self.fov_up, self.fov_down)
-          tsdf_vol.integrate(scan.proj_color*255, scan.proj_range, self.poses[i], obs_weight=1.)
-        fps = self.nscans/(time.time()-t0_elapse)
-        print("Average FPS: %.2f"%(fps))
-
-        print("Raytracing...")
-        rays = self.create_rays()
-        origin = np.array([0, 0, 0])
-        self.ray_endpoints, self.ray_colors = tsdf_vol.throw_rays_at_mesh(rays, origin, self.H, self.W)
-      elif adaption == 'catmesh':
-        # TODO Category Mesh
-        quit()
-      else:
-        # Error
-        print("\nAdaption method not recognized or not defined")
-        quit()
+      print("Raytracing...")
+      rays = self.create_rays()
+      origin = np.array([0, 0, 0])
+      self.ray_endpoints, self.ray_colors = tsdf_vol.throw_rays_at_mesh(rays, origin, self.H, self.W)
+    elif adaption == 'catmesh':
+      # TODO Category Mesh
+      quit()
+    else:
+      # Error
+      print("\nAdaption method not recognized or not defined")
+      quit()
 
   # TODO pass parameter for rays
   def create_rays(self):
     beams = []
     fov_up = self.fov_up
     fov_down = self.fov_down
+    # TODO correct initial rotation of sensor
     yaw_angles = np.linspace(0, 360, self.W)/180.*np.pi
-    pitch = np.linspace(fov_down, fov_up, self.H)/180.*np.pi
+    pitch = np.linspace(fov_up, fov_down, self.H)/180.*np.pi
     fov_up = fov_up / 180.0 * np.pi      # field of view up in radians
     fov_down = fov_down / 180.0 * np.pi  # field of view down in radians
     fov = abs(fov_down) + abs(fov_up)
     pitch = np.pi/2 - pitch
-    for yaw in yaw_angles:
-      point_x = np.sin(pitch) * np.cos(-yaw)
-      point_y = np.sin(pitch) * np.sin(-yaw)
-      point_z = np.cos(pitch)
-      point_x = point_x.reshape(self.H,1)
-      point_y = point_y.reshape(self.H,1)
-      point_z = point_z.reshape(self.H,1)
+    yaw = yaw_angles
+    for p in pitch:
+      point_x = np.sin(p) * np.cos(-yaw)
+      point_y = np.sin(p) * np.sin(-yaw)
+      point_z = np.cos(p) * np.ones(yaw.shape)
+      point_x = point_x.reshape(self.W,1)
+      point_y = point_y.reshape(self.W,1)
+      point_z = point_z.reshape(self.W,1)
       single_column = np.concatenate((point_x, point_y, point_z), axis=1)
       beams.append(single_column)
     beams = np.array(beams).reshape(self.W*self.H,-1)

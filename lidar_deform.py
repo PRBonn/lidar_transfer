@@ -311,6 +311,8 @@ if __name__ == '__main__':
     if adaption == 'cp': # closest point
       vis.set_laserscans(scans, poses[idx])
     elif adaption == 'mesh':
+      # TODO Check colors
+      # print(scans.ray_colors)
       vis.set_points(scans.ray_endpoints, scans.ray_colors)
     elif adaption == 'catmesh':
       # TODO Category Mesh

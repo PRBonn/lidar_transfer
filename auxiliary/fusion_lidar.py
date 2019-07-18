@@ -92,12 +92,16 @@ class TSDFVolume(object):
           float pt_z = vol_origin[2]+voxel_z*voxel_size;
 
           // World coordinates to camera coordinates
-          float tmp_pt_x = pt_x-cam_pose[0*4+3];
-          float tmp_pt_y = pt_y-cam_pose[1*4+3];
-          float tmp_pt_z = pt_z-cam_pose[2*4+3];
-          float cam_pt_x = cam_pose[0*4+0]*tmp_pt_x+cam_pose[1*4+0]*tmp_pt_y+cam_pose[2*4+0]*tmp_pt_z;
-          float cam_pt_y = cam_pose[0*4+1]*tmp_pt_x+cam_pose[1*4+1]*tmp_pt_y+cam_pose[2*4+1]*tmp_pt_z;
-          float cam_pt_z = cam_pose[0*4+2]*tmp_pt_x+cam_pose[1*4+2]*tmp_pt_y+cam_pose[2*4+2]*tmp_pt_z;
+          //float tmp_pt_x = pt_x-cam_pose[0*4+3];
+          //float tmp_pt_y = pt_y-cam_pose[1*4+3];
+          //float tmp_pt_z = pt_z-cam_pose[2*4+3];
+          //float cam_pt_x = cam_pose[0*4+0]*tmp_pt_x+cam_pose[1*4+0]*tmp_pt_y+cam_pose[2*4+0]*tmp_pt_z;
+          //float cam_pt_y = cam_pose[0*4+1]*tmp_pt_x+cam_pose[1*4+1]*tmp_pt_y+cam_pose[2*4+1]*tmp_pt_z;
+          //float cam_pt_z = cam_pose[0*4+2]*tmp_pt_x+cam_pose[1*4+2]*tmp_pt_y+cam_pose[2*4+2]*tmp_pt_z;
+
+          float cam_pt_x = pt_x;
+          float cam_pt_z = pt_z;
+          float cam_pt_y = pt_y;
 
           // TODO spherical projection
           int im_h = (int) other_params[2];
@@ -308,17 +312,17 @@ class TSDFVolume(object):
     return verts, faces, norms, colors
 
   def throw_rays_at_mesh(self, rays, origin, H, W):
-      print("Get mesh by marching cubes...")
-      verts, faces, norms, colors = self.get_mesh()
+    print("Get mesh by marching cubes...")
+    verts, faces, norms, colors = self.get_mesh()
 
-      # Arrays must be contiguous
-      verts = np.ascontiguousarray(verts)
-      faces = np.ascontiguousarray(faces)
-      colors = np.ascontiguousarray(colors)
+    # Arrays must be contiguous
+    verts = np.ascontiguousarray(verts)
+    faces = np.ascontiguousarray(faces)
+    colors = np.ascontiguousarray(colors)
 
-      # Raytracing
-      ray_endpoints, ray_colors = rt.ray_mesh_intersection(rays, origin, verts, colors, faces, H, W)
-      return ray_endpoints, ray_colors
+    # Raytracing
+    ray_endpoints, ray_colors = rt.ray_mesh_intersection(rays, origin, verts, colors, faces, H, W)
+    return ray_endpoints, ray_colors
 
 # -------------------------------------------------------------------------------
 # Additional helper functions
