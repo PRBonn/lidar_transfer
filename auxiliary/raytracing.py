@@ -23,17 +23,21 @@ def ray_mesh_intersection(rays, origin, vertices, vertices_colors, faces, H, W):
 def ray_mesh_intersection_CPU(rays, origin, vertices, vertices_colors, faces, H, W):
   ray_endpoints = np.zeros((H * W, 3))
   ray_image = np.zeros((H * W, 3))
+  # TODO Check colors
+  print(vertices_colors.shape)
   for i, ray in enumerate(rays):
     for triangle_index in faces:
       triangle = vertices[triangle_index]
-      valid, point = ray_triangle_intersection(ray, origin, triangle)
+      colors = vertices_colors[triangle_index]
+      valid, point = ray_triangle_intersection(ray, origin, triangle, colors)
+      print(triangle_index, colors, colors[0])
 
       if valid:
         # save point corresponding to current ray
         ray_endpoints[i,:] = point
 
         # TODO Assign color to image
-        ray_image[i,:] = np.ones((1,3))*255
+        ray_image[i,:] = colors[0]
   return ray_endpoints, ray_image
 
 def ray_mesh_intersection_CUDA(rays, origin, vertices, vertices_colors, faces, H, W):
@@ -185,7 +189,7 @@ def ray_mesh_intersection_CUDA(rays, origin, vertices, vertices_colors, faces, H
   return endpoints, colors
 
 # from https://en.wikipedia.org/wiki/Möller–Trumbore_intersection_algorithm
-def ray_triangle_intersection(ray, origin, triangle):
+def ray_triangle_intersection(ray, origin, triangle, colors):
   assert len(ray) == 3
   assert len(origin) == 3
   assert triangle.shape == (3,3)
