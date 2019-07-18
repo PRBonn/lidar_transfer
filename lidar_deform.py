@@ -6,8 +6,6 @@ import yaml
 import numpy as np
 from auxiliary.laserscan import LaserScan, SemLaserScan, MultiSemLaserScan
 from auxiliary.laserscanvis import LaserScanVis
-from auxiliary.progressbar import progressbar
-
 
 def parse_calibration(filename):
   """ read calibration file with given filename
@@ -291,8 +289,6 @@ if __name__ == '__main__':
 
   idx = FLAGS.offset
   while True:
-    progressbar("Scan", idx, len(scan_names))
-
     # open pointcloud
     scan.open_scan(scan_names[idx], fov_up, fov_down)
     scan.open_label(label_names[idx])
