@@ -16,9 +16,9 @@ except Exception as err:
 
 def ray_mesh_intersection(rays, origin, vertices, vertices_colors, faces, H, W):
     if GPU_MODE:
-        ray_mesh_intersection_CUDA(rays, origin, vertices, vertices_colors, faces, H=H, W=W)
+        return ray_mesh_intersection_CUDA(rays, origin, vertices, vertices_colors, faces, H, W)
     else:
-        ray_mesh_intersection_CPU(rays, origin, vertices, vertices_colors, faces, H, W)
+        return ray_mesh_intersection_CPU(rays, origin, vertices, vertices_colors, faces, H, W)
 
 def ray_mesh_intersection_CPU(rays, origin, vertices, vertices_colors, faces, H, W):
     ray_endpoints = np.zeros((H * W, 3))
@@ -36,7 +36,7 @@ def ray_mesh_intersection_CPU(rays, origin, vertices, vertices_colors, faces, H,
                 ray_image[i,:] = np.ones((1,3))*255
     return ray_endpoints, ray_image
 
-def ray_mesh_intersection_CUDA(rays, origin, vertices, vertices_colors, faces, H=64, W=1024):
+def ray_mesh_intersection_CUDA(rays, origin, vertices, vertices_colors, faces, H, W):
     endpoints = np.zeros(rays.shape).astype(np.float32)
     colors = np.zeros(rays.shape).astype(np.float32)
     
@@ -135,9 +135,9 @@ def ray_mesh_intersection_CUDA(rays, origin, vertices, vertices_colors, faces, H
             float t = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) * inv_a;
             if (t > eps){
                 // TODO color by closest vertex
-                colors[x*3+0] = verts_colors[faces[f*3+0]*3+2]; // R = B
-                colors[x*3+1] = verts_colors[faces[f*3+0]*3+1]; // G = G
-                colors[x*3+2] = verts_colors[faces[f*3+0]*3+0]; // B = R
+                colors[x*3+0] = verts_colors[faces[f*3+0]*3+0];
+                colors[x*3+1] = verts_colors[faces[f*3+0]*3+1];
+                colors[x*3+2] = verts_colors[faces[f*3+0]*3+2];
 
                 endpoints[x*3+0] = origin[0] + ray[0] * t;
                 endpoints[x*3+1] = origin[1] + ray[1] * t;
@@ -259,7 +259,7 @@ if __name__ == "__main__":
     faces = np.array([[0, 1, 2],[0, 1, 3]])
     # GPU_MODE = False
     if GPU_MODE:
-        endpoints, colors = ray_mesh_intersection_CUDA(rays, origin, vertices, vertices_colors, faces, H=1, W=1)
+        endpoints, colors = ray_mesh_intersection_CUDA(rays, origin, vertices, vertices_colors, faces, 1, 1)
         print("\n\nendpoints\n", endpoints)
         print("Done")
     else:
