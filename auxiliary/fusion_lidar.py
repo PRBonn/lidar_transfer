@@ -62,7 +62,6 @@ class TSDFVolume(object):
                                         float * color_vol,
                                         float * vol_dim,
                                         float * vol_origin,
-                                        float * cam_intr,
                                         float * cam_pose,
                                         float * other_params,
                                         float * color_im,
@@ -99,10 +98,6 @@ class TSDFVolume(object):
                 float cam_pt_x = cam_pose[0*4+0]*tmp_pt_x+cam_pose[1*4+0]*tmp_pt_y+cam_pose[2*4+0]*tmp_pt_z;
                 float cam_pt_y = cam_pose[0*4+1]*tmp_pt_x+cam_pose[1*4+1]*tmp_pt_y+cam_pose[2*4+1]*tmp_pt_z;
                 float cam_pt_z = cam_pose[0*4+2]*tmp_pt_x+cam_pose[1*4+2]*tmp_pt_y+cam_pose[2*4+2]*tmp_pt_z;
-
-                // Camera coordinates to image pixels
-                // int pixel_x = (int) roundf(cam_intr[0*3+0]*(cam_pt_x/cam_pt_z)+cam_intr[0*3+2]);
-                // int pixel_y = (int) roundf(cam_intr[1*3+1]*(cam_pt_y/cam_pt_z)+cam_intr[1*3+2]);
 
                 // TODO spherical projection
                 int im_h = (int) other_params[2];
@@ -183,34 +178,7 @@ class TSDFVolume(object):
             self._max_gpu_grid_dim = np.array([grid_dim_x,grid_dim_y,grid_dim_z]).astype(int)
             self._n_gpu_loops = int(np.ceil(float(np.prod(self._vol_dim))/float(np.prod(self._max_gpu_grid_dim)*self._max_gpu_threads_per_block)))
 
-
-    # (Deprecated) Expand voxel volume to encompass new bounds
-    # def expand(self,new_bnds):
-    #     for dim in range(3):
-    #         if new_bnds[dim,0] < self._vol_bnds[dim,0]: # expand lower bounds
-    #             n_voxels_expand = int(np.ceil((self._vol_bnds[dim,0]-new_bnds[dim,0])/self._voxel_size))
-    #             new_chunk_size = np.round((self._vol_bnds[:,1]-self._vol_bnds[:,0])/self._voxel_size).astype(int)
-    #             new_chunk_size[dim] = n_voxels_expand # size of expanding region (i.e. chunk)
-
-    #             # Initialize chunks and concatenate to current voxel volume
-    #             self._tsdf_vol_cpu = np.concatenate((np.ones(new_chunk_size),self._tsdf_vol_cpu),axis=dim)
-    #             self._weight_vol_cpu = np.concatenate((np.zeros(new_chunk_size),self._weight_vol_cpu),axis=dim)
-    #             self._color_vol_cpu = np.concatenate((np.zeros(new_chunk_size),self._color_vol_cpu),axis=dim)
-    #             self._vol_bnds[dim,0] -= n_voxels_expand*self._voxel_size # update voxel volume bounds
-
-    #         if new_bnds[dim,1] > self._vol_bnds[dim,1]: # expand upper bounds
-    #             n_voxels_expand = int(np.ceil((new_bnds[dim,1]-self._vol_bnds[dim,1])/self._voxel_size))
-    #             new_chunk_size = np.round((self._vol_bnds[:,1]-self._vol_bnds[:,0])/self._voxel_size).astype(int)
-    #             new_chunk_size[dim] = n_voxels_expand # size of expanding region (i.e. chunk)
-                
-    #             # Initialize chunks and concatenate to current voxel volume
-    #             self._tsdf_vol_cpu = np.concatenate((self._tsdf_vol_cpu,np.ones(new_chunk_size)),axis=dim)
-    #             self._weight_vol_cpu = np.concatenate((self._weight_vol_cpu,np.zeros(new_chunk_size)),axis=dim)
-    #             self._color_vol_cpu = np.concatenate((self._color_vol_cpu,np.zeros(new_chunk_size)),axis=dim)
-    #             self._vol_bnds[dim,1] += n_voxels_expand*self._voxel_size # update voxel volume bounds
-
-
-    def integrate(self,color_im,depth_im,cam_intr,cam_pose,obs_weight=1.):
+    def integrate(self,color_im,depth_im,cam_pose,obs_weight=1.):
         im_h = depth_im.shape[0]
         im_w = depth_im.shape[1]
 
@@ -227,7 +195,6 @@ class TSDFVolume(object):
                                      self._color_vol_gpu,
                                      cuda.InOut(self._vol_dim.astype(np.float32)),
                                      cuda.InOut(self._vol_origin.astype(np.float32)),
-                                     cuda.InOut(cam_intr.reshape(-1).astype(np.float32)),
                                      cuda.InOut(cam_pose.reshape(-1).astype(np.float32)),
                                      cuda.InOut(np.asarray([gpu_loop_idx,self._voxel_size,im_h,im_w,self._trunc_margin,obs_weight,self.fov_up,self.fov_down],np.float32)),
                                      cuda.InOut(color_im.reshape(-1).astype(np.float32)),
@@ -248,10 +215,6 @@ class TSDFVolume(object):
             # World coordinates to camera coordinates
             world2cam = np.linalg.inv(cam_pose)
             cam_pts = np.dot(world2cam[:3,:3],world_pts)+np.tile(world2cam[:3,3].reshape(3,1),(1,world_pts.shape[1]))
-            
-            # Camera coordinates to image pixels
-            # pix_x = np.round(cam_intr[0,0]*(cam_pts[0,:]/cam_pts[2,:])+cam_intr[0,2]).astype(int)
-            # pix_y = np.round(cam_intr[1,1]*(cam_pts[1,:]/cam_pts[2,:])+cam_intr[1,2]).astype(int)
             
             # Sphere camera coordinates to image pixel
             fov_up = self.fov_up / 180.0 * np.pi      # field of view up in radians
@@ -329,10 +292,10 @@ class TSDFVolume(object):
 
     # Get mesh of voxel volume via marching cubes
     def get_mesh(self):
-        tsdf_vol,color_vol = self.get_volume()
+        tsdf_vol, color_vol = self.get_volume()
 
         # Marching cubes
-        verts,faces,norms,vals = measure.marching_cubes_lewiner(tsdf_vol,level=0)
+        verts, faces, norms, vals = measure.marching_cubes_lewiner(tsdf_vol, level=0)
         verts_ind = np.round(verts).astype(int)
         verts = verts*self._voxel_size+self._vol_origin # voxel grid coordinates to world coordinates
 
@@ -343,10 +306,11 @@ class TSDFVolume(object):
         colors_r = rgb_vals-colors_b*256*256-colors_g*256
         colors = np.floor(np.asarray([colors_r,colors_g,colors_b])).T
         colors = colors.astype(np.uint8)
-        return verts,faces,norms,colors
+        return verts, faces, norms, colors
 
-    def throw_rays_at_mesh(self, rays, H, W):
-        verts,faces,norms,colors = self.get_mesh()
+    def throw_rays_at_mesh(self, rays, origin, H, W):
+        print("Get mesh by marching cubes...")
+        verts, faces, norms, colors = self.get_mesh()
 
         # Arrays must be contiguous
         verts = np.ascontiguousarray(verts)
@@ -354,7 +318,7 @@ class TSDFVolume(object):
         colors = np.ascontiguousarray(colors)
 
         # Raytracing
-        ray_endpoints, ray_colors = rt.ray_mesh_intersection(rays, verts, colors, faces, H, W)
+        ray_endpoints, ray_colors = rt.ray_mesh_intersection(rays, origin, verts, colors, faces, H, W)
         return ray_endpoints, ray_colors
 
 # -------------------------------------------------------------------------------
