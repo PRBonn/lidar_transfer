@@ -683,7 +683,10 @@ class MultiSemLaserScan():
         self.scans[0].open_label_append(label_names[idx])
         self.scans[0].colorize()
 
-  def deform(self, adaption, poses, idx):
+      # remove class unlabeled (0), outlier (1)
+      self.scans[0].remove_classes(self.ignore_classes)
+
+  def deform(self, adaption, poses, idx,):
     """ Deforms laserscan with specified adaption method and transformation
     """
     # assert(self.scan_idx.shape[0] == self.points.shape[0])
@@ -730,7 +733,6 @@ class MultiSemLaserScan():
       print("Initializing voxel volume...")
       tsdf_vol = fl.TSDFVolume(vol_bnds, voxel_size=self.voxel_size, fov_up=self.fov_up, fov_down=self.fov_down)
 
-      # TODO Add BVH to speed up raytracing
       t0_elapse = time.time()
       for i, scan in enumerate(self.scans):
         print("Fusing scan %d/%d"%(i+1,self.nscans))
@@ -741,11 +743,12 @@ class MultiSemLaserScan():
       fps = self.nscans/(time.time()-t0_elapse)
       print("Average FPS: %.2f"%(fps))
 
-      print("Raytracing...")
       rays = self.create_rays()
-      origin = np.array([0, 0, 0])
-      self.ray_endpoints, self.ray_colors = tsdf_vol.throw_rays_at_mesh(rays, origin, self.H, self.W)
-      print("Done")
+      origin = np.array([0, 0, 0]).astype(np.float32)
+      t0_elapse = time.time()
+      self.ray_endpoints, self.ray_colors = tsdf_vol.throw_rays_at_mesh(rays, origin, self.H, self.W, self.scans[0].color_lut)
+      rps = len(rays)/(time.time()-t0_elapse)
+      print("Average Rays per sec: %.2f"%(rps))
     elif adaption == 'catmesh':
       # TODO Category Mesh
       quit()
@@ -759,12 +762,18 @@ class MultiSemLaserScan():
     beams = []
     fov_up = self.fov_up
     fov_down = self.fov_down
-    # TODO correct initial rotation of sensor
-    yaw_angles = np.linspace(0, 360, self.W)/180.*np.pi
+
+    # TODO Option to add noise to angle values
+
+    # TODO Adapt speed from poses to reflect rolling shutter in rays
+
+    # correct initial rotation of sensor
+    initial = 180
+    yaw_angles = (np.linspace(0, 360, self.W) + initial)
+    larger = yaw_angles > 360
+    yaw_angles[larger] -= 360
+    yaw_angles = yaw_angles/180.*np.pi
     pitch = np.linspace(fov_up, fov_down, self.H)/180.*np.pi
-    fov_up = fov_up / 180.0 * np.pi      # field of view up in radians
-    fov_down = fov_down / 180.0 * np.pi  # field of view down in radians
-    fov = abs(fov_down) + abs(fov_up)
     pitch = np.pi/2 - pitch
     yaw = yaw_angles
     for p in pitch:
@@ -777,7 +786,7 @@ class MultiSemLaserScan():
       single_column = np.concatenate((point_x, point_y, point_z), axis=1)
       beams.append(single_column)
     beams = np.array(beams).reshape(self.W*self.H,-1)
-    return np.ascontiguousarray(beams)
+    return np.ascontiguousarray(beams.astype(np.float32))
 
   def write(self, out_dir, idx, range_image=False):
     # Only write back_points which are valid (not black)

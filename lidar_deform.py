@@ -274,6 +274,11 @@ if __name__ == '__main__':
   print("Moving classes", moving_classes)
   print("*" * 80)
 
+  try:
+    voxel_bounds = voxel_bounds.reshape(3,2)
+  except Exception as e:
+    print("No voxel boundaries set")
+
   # create a scan
   color_dict = CFG["color_map"]
   nclasses = len(color_dict)
@@ -282,7 +287,7 @@ if __name__ == '__main__':
                             ignore_classes, moving_classes,
                             t_fov_up, t_fov_down, color_dict,
                             transformation=transformation,
-                            voxel_size=voxel_size, vol_bnds=voxel_bounds.reshape(3,2))
+                            voxel_size=voxel_size, vol_bnds=voxel_bounds)
 
   # create a visualizer
   vis = LaserScanVis([W, t_W], [beams, t_beams])
@@ -315,9 +320,7 @@ if __name__ == '__main__':
     if adaption == 'cp': # closest point
       vis.set_laserscans(scans, poses[idx])
     elif adaption == 'mesh':
-      # TODO Check colors
-      # print(scans.ray_colors)
-      vis.set_points(scans.ray_endpoints, scans.ray_colors)
+      vis.set_points(scans.ray_endpoints, scans.ray_colors, t_W, t_beams)
     elif adaption == 'catmesh':
       # TODO Category Mesh
       quit()

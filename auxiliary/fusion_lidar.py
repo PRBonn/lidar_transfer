@@ -6,6 +6,7 @@
 import numpy as np
 from skimage import measure
 import auxiliary.raytracing as rt
+import auxiliary.raytracer.RayTracerCython as rtc
 try:
   import pycuda.driver as cuda
   import pycuda.autoinit
@@ -311,17 +312,23 @@ class TSDFVolume(object):
     colors = colors.astype(np.uint8)
     return verts, faces, norms, colors
 
-  def throw_rays_at_mesh(self, rays, origin, H, W):
+  def throw_rays_at_mesh(self, rays, origin, H, W, color_lut):
     print("Get mesh by marching cubes...")
-    verts, faces, norms, colors = self.get_mesh()
+    verts, faces, norms, colors = self.get_mesh(color_lut)
+
+
 
     # Arrays must be contiguous
-    verts = np.ascontiguousarray(verts)
-    faces = np.ascontiguousarray(faces)
-    colors = np.ascontiguousarray(colors)
+    verts = np.ascontiguousarray(verts.reshape(-1))
+    faces = np.ascontiguousarray(faces.reshape(-1))
+    colors = np.ascontiguousarray(colors.reshape(-1).astype(np.int32))
+
+    rays = rays.reshape(-1)
 
     # Raytracing
-    ray_endpoints, ray_colors = rt.ray_mesh_intersection(rays, origin, verts, colors, faces, H, W)
+    print("Raytracing...")
+    # ray_endpoints, ray_colors = rt.ray_mesh_intersection(rays, origin, verts, colors, faces, H, W)
+    ray_endpoints, ray_colors = rtc.C_Trace(rays, origin, verts, faces, colors, H, W)
     return ray_endpoints, ray_colors
 
 # -------------------------------------------------------------------------------
