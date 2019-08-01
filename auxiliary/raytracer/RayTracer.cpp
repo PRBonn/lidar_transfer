@@ -194,6 +194,5 @@ extern "C"
               float* endpoints, int* endcolors) {
     trace(rays, origin, verts, faces, colors, n_rays, n_verts, n_faces, height,
           endpoints, endcolors);
-    printf("Trace done\n");
   }
 }

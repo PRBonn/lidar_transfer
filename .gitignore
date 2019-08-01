@@ -159,3 +159,6 @@ dmypy.json
 .pyre/
 
 # End of https://www.gitignore.io/api/macos,python
+auxiliary/raytracer/.nfs0*
+*.ppm
+auxiliary/raytracer/RayTracerCython.cpp
