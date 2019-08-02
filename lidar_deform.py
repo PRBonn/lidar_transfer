@@ -308,7 +308,7 @@ if __name__ == '__main__':
     # open multiple scans
     scans.open_multiple_scans(scan_names, label_names, poses, idx)
 
-    scans.deform(adaption, poses, idx)
+    verts, verts_colors, faces = scans.deform(adaption, poses, idx)
 
     # Export backprojected point cloud (+ range image)
     # TODO check folder existence earlier
@@ -318,9 +318,13 @@ if __name__ == '__main__':
     vis.set_laserscan(scan)
     # vis.set_laserscan2(scan2)
     if adaption == 'cp': # closest point
-      vis.set_laserscans(scans, poses[idx])
+      vis.set_laserscans(scans)
+      vis.set_diff(scan, scans)
     elif adaption == 'mesh':
+      vis.show_mesh(True)
       vis.set_points(scans.ray_endpoints, scans.ray_colors, t_W, t_beams)
+      vis.set_mesh(verts, verts_colors/255, faces)
+      vis.set_diff(scan, scans)
     elif adaption == 'catmesh':
       # TODO Category Mesh
       quit()

@@ -691,7 +691,7 @@ class MultiSemLaserScan():
     """
     # assert(self.scan_idx.shape[0] == self.points.shape[0])
     # assert(self.label.shape[0] == self.points.shape[0])
-
+    self.adaption = adaption
     # different approaches for point cloud adaption
     if adaption == 'cp': # closest point
       for scan in self.scans:
@@ -705,6 +705,7 @@ class MultiSemLaserScan():
         scan.do_range_projection_new(self.fov_up, self.fov_down, remove=True)
         scan.do_label_projection_new()
         scan.do_reverse_projection_new(self.fov_up, self.fov_down)
+        return [], [], []
     elif adaption == 'mesh':
       vol_bnds = self.vol_bnds
       # Automatically set voxel bounds by examining the complete point cloud
@@ -715,8 +716,6 @@ class MultiSemLaserScan():
           vol_bnds = np.concatenate((np.minimum(bnds[:,0],vol_bnds[:,0]).reshape(3,1),
                                      np.maximum(bnds[:,1],vol_bnds[:,1]).reshape(3,1)),
                                      axis=1)
-      # TODO Fix mesh with one scan
-      # print("Create range images...")
       for i, scan in enumerate(self.scans):
         print("Create range image %d/%d"%(i+1,self.nscans))
         # After accumulating all scans then undo the pose and then do range projection
@@ -746,9 +745,10 @@ class MultiSemLaserScan():
       rays = self.create_rays()
       origin = np.array([0, 0, 0]).astype(np.float32)
       t0_elapse = time.time()
-      self.ray_endpoints, self.ray_colors = tsdf_vol.throw_rays_at_mesh(rays, origin, self.H, self.W, self.scans[0].color_lut)
+      self.ray_endpoints, self.ray_colors, verts, colors, faces, self.range_image = tsdf_vol.throw_rays_at_mesh(rays, origin, self.H, self.W, self.scans[0].color_lut)
       rps = len(rays)/(time.time()-t0_elapse)
       print("Average Rays per sec: %.2f"%(rps))
+      return verts, colors, faces
     elif adaption == 'catmesh':
       # TODO Category Mesh
       quit()

@@ -7,7 +7,7 @@ cdef extern from "RayTracer.cpp":
     void demo()
 
 cdef extern from "RayTracer.cpp":
-    void ctrace(float*, float*, float*, int*, int*, int, int, int, int, float*, int*)
+    void ctrace(float*, float*, float*, int*, int*, int, int, int, int, float*, int*, float*)
 
 cdef extern from "BBox.cpp":
     pass
@@ -27,8 +27,9 @@ def C_Trace(np.ndarray[float, ndim=1, mode='c'] rays,
     s = (len(rays),)
     cdef np.ndarray[float, ndim=1, mode='c'] ray_endpoints = np.zeros(s).astype(np.float32)
     cdef np.ndarray[int, ndim=1, mode='c'] ray_colors = np.zeros(s).astype(np.int32)
+    cdef np.ndarray[float, ndim=1, mode='c'] range_image = np.zeros((H*W,)).astype(np.float32)
     ctrace(&rays[0], &origin[0], &verts[0], &faces[0], &colors[0],
            n_rays, n_verts, n_faces, H,
-           &ray_endpoints[0], &ray_colors[0])
+           &ray_endpoints[0], &ray_colors[0], &range_image[0])
 
-    return ray_endpoints.reshape(-1,3), ray_colors.reshape(-1,3)
+    return ray_endpoints.reshape(-1,3), ray_colors.reshape(-1,3), range_image.reshape(-1,W)

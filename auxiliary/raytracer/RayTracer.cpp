@@ -17,7 +17,8 @@ Vector3 randVector3() {
 }
 
 void trace(float* rays, float* origin_in, float* verts, int* faces, int* colors,
-           int n_rays, int n_verts, int n_faces, int height, float* endpoints, int* endcolors) {
+           int n_rays, int n_verts, int n_faces, int height,
+           float* endpoints, int* endcolors, float* range) {
   vector<Object*> objects;
   // for(int i=0; i<10; ++i) {
   //   printf("r %f %f %f\n", rays[i*3+0], rays[i*3+1], rays[i*3+2]);
@@ -81,6 +82,9 @@ void trace(float* rays, float* origin_in, float* verts, int* faces, int* colors,
         endcolors[index+1] = colors.y;
         // pixels[index+2] = colors.z;
         endcolors[index+2] = colors.z;
+
+        // Update range image
+        range[(width * j + i)] = I.t;
       }
     }
   }
@@ -191,8 +195,8 @@ extern "C"
   void cdemo() {demo(); printf("Demo done\n");}
   void ctrace(float* rays, float* origin, float* verts, int* faces, int* colors,
               int n_rays, int n_verts, int n_faces, int height,
-              float* endpoints, int* endcolors) {
+              float* endpoints, int* endcolors, float* range) {
     trace(rays, origin, verts, faces, colors, n_rays, n_verts, n_faces, height,
-          endpoints, endcolors);
+          endpoints, endcolors, range);
   }
 }

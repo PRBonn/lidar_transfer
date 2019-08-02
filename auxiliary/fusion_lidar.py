@@ -316,20 +316,16 @@ class TSDFVolume(object):
     print("Get mesh by marching cubes...")
     verts, faces, norms, colors = self.get_mesh(color_lut)
 
-
-
-    # Arrays must be contiguous
-    verts = np.ascontiguousarray(verts.reshape(-1))
-    faces = np.ascontiguousarray(faces.reshape(-1))
-    colors = np.ascontiguousarray(colors.reshape(-1).astype(np.int32))
-
+    # Arrays must be contiguous and 1D
+    verts_c = np.ascontiguousarray(verts.reshape(-1))
+    faces_c = np.ascontiguousarray(faces.reshape(-1))
+    colors_c = np.ascontiguousarray(colors.reshape(-1).astype(np.int32))
     rays = rays.reshape(-1)
 
-    # Raytracing
     print("Raytracing...")
     # ray_endpoints, ray_colors = rt.ray_mesh_intersection(rays, origin, verts, colors, faces, H, W)
-    ray_endpoints, ray_colors = rtc.C_Trace(rays, origin, verts, faces, colors, H, W)
-    return ray_endpoints, ray_colors
+    ray_endpoints, ray_colors, range_image = rtc.C_Trace(rays, origin, verts_c, faces_c, colors_c, H, W)
+    return ray_endpoints, ray_colors, verts, colors, faces, range_image
 
 # -------------------------------------------------------------------------------
 # Additional helper functions
