@@ -678,15 +678,15 @@ class MultiSemLaserScan():
         # remove class unlabeled (0), outlier (1)
         scan.remove_classes(self.ignore_classes)
         
-      else:  # use a single scan
-        self.scans[0].open_scan_append(scan_names[idx], poses[idx], self.fov_up, self.fov_down)
-        self.scans[0].open_label_append(label_names[idx])
-        self.scans[0].colorize()
+    else:  # use a single scan
+      self.scans[0].open_scan_append(scan_names[idx], poses[idx], self.fov_up, self.fov_down)
+      self.scans[0].open_label_append(label_names[idx])
+      self.scans[0].colorize()
 
       # remove class unlabeled (0), outlier (1)
       self.scans[0].remove_classes(self.ignore_classes)
 
-  def deform(self, adaption, poses, idx,):
+  def deform(self, adaption, poses, idx):
     """ Deforms laserscan with specified adaption method and transformation
     """
     # assert(self.scan_idx.shape[0] == self.points.shape[0])
@@ -706,6 +706,7 @@ class MultiSemLaserScan():
         scan.do_label_projection_new()
         scan.do_reverse_projection_new(self.fov_up, self.fov_down)
         return [], [], []
+
     elif adaption == 'mesh':
       vol_bnds = self.vol_bnds
       # Automatically set voxel bounds by examining the complete point cloud
@@ -749,9 +750,11 @@ class MultiSemLaserScan():
       rps = len(rays)/(time.time()-t0_elapse)
       print("Average Rays per sec: %.2f"%(rps))
       return verts, colors, faces
+
     elif adaption == 'catmesh':
       # TODO Category Mesh
       quit()
+
     else:
       # Error
       print("\nAdaption method not recognized or not defined")
