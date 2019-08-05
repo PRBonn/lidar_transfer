@@ -125,7 +125,7 @@ if __name__ == '__main__':
   # open config file
   try:
     print("Opening config file %s" % FLAGS.config)
-    CFG = yaml.load(open(FLAGS.config, 'r'))
+    CFG = yaml.safe_load(open(FLAGS.config, 'r'))
   except Exception as e:
     print(e)
     print("Error opening yaml file.")
@@ -167,7 +167,7 @@ if __name__ == '__main__':
     scan_config_path = os.path.join(FLAGS.dataset, "sequences",
                                     FLAGS.sequence, "config.yaml")
     print("Opening config file", scan_config_path)
-    scan_config = yaml.load(open(scan_config_path, 'r'))
+    scan_config = yaml.safe_load(open(scan_config_path, 'r'))
   except Exception as e:
     print(e)
     print("Error opening yaml file.")
@@ -225,7 +225,7 @@ if __name__ == '__main__':
     if FLAGS.target == '':
       FLAGS.target = scan_config_path
     print("Opening target config file", FLAGS.target)
-    target_config = yaml.load(open(FLAGS.target, 'r'))
+    target_config = yaml.safe_load(open(FLAGS.target, 'r'))
   except Exception as e:
     print(e)
     print("Error opening yaml file.")
