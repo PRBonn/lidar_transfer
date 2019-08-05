@@ -43,16 +43,6 @@ class LaserScanVis():
     visuals.XYZAxis(parent=self.back_view.scene)
     self.grid_view.add_widget(self.back_view, 0, 1)
 
-    # target laserscan
-    if self.mesh:
-      self.mesh_view = vispy.scene.widgets.ViewBox(border_color='white', parent=self.scan_canvas.scene)
-      self.mesh_vis = visuals.Mesh(shading=None)
-      self.mesh_view.camera = 'turntable'
-      self.mesh_view.camera.link(self.scan_view.camera)
-      self.mesh_view.add(self.mesh_vis)
-      visuals.XYZAxis(parent=self.mesh_view.scene)
-      self.grid_view.add_widget(self.mesh_view, 0, 2)
-
     # self.grid_view.padding = 6
 
     # NEW canvas for range img data
@@ -98,6 +88,13 @@ class LaserScanVis():
 
   def show_mesh(self, show_mesh_):
     self.mesh = show_mesh_
+    self.mesh_view = vispy.scene.widgets.ViewBox(border_color='white', parent=self.scan_canvas.scene)
+    self.mesh_vis = visuals.Mesh(shading=None)
+    self.mesh_view.camera = 'turntable'
+    self.mesh_view.camera.link(self.scan_view.camera)
+    self.mesh_view.add(self.mesh_vis)
+    visuals.XYZAxis(parent=self.mesh_view.scene)
+    self.grid_view.add_widget(self.mesh_view, 0, 2)
 
   def set_laserscan(self, scan):
     # plot range
@@ -142,15 +139,10 @@ class LaserScanVis():
     self.img_vis.update()
 
   def set_laserscans(self, scan):
-    # TODO use all available scans
     # plot range
     if hasattr(scan.get_scan(0), 'label_color'):
-      # print(scan.label_color.shape)
-      # back_points = hom_points[:, 0:3]
-      # back_points[:,0] -=4
-      points, label_color = scan.get_points()
-      # label_color = scan.label_color_image.reshape(-1,3)
-      # points = scan.back_points.reshape(-1,3)
+      label_color = scan.joint_scan.label_color_image.reshape(-1,3)
+      points = scan.joint_scan.back_points.reshape(-1,3)
       self.back_vis.set_data(points,
                              face_color=label_color[..., ::-1],
                              edge_color=label_color[..., ::-1],
