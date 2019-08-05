@@ -711,23 +711,24 @@ class MultiSemLaserScan():
     self.adaption = adaption
     # different approaches for point cloud adaption
     if adaption == 'cp': # closest point
-      self.joint_scan = SemLaserScan(self.H, self.W, self.nclasses, self.color_dict,
+      self.merged = SemLaserScan(self.H, self.W, self.nclasses, self.color_dict,
                                      self.transformation, self.beam_angles)
-      self.joint_scan.reset()
-      self.joint_scan.pose = poses[idx]
+      self.merged.reset()
+      self.merged.pose = poses[idx]
       
       # Merge scans into a single scan
       for scan in self.scans:
-        self.joint_scan.points = np.concatenate((self.joint_scan.points, scan.points))
-        self.joint_scan.remissions = np.concatenate((self.joint_scan.remissions, scan.remissions))
-        self.joint_scan.label = np.concatenate((self.joint_scan.label, scan.label))
-        self.joint_scan.label_color = np.concatenate((self.joint_scan.label_color, scan.label_color))
+        self.merged.points = np.concatenate((self.merged.points, scan.points))
+        self.merged.remissions = np.concatenate((self.merged.remissions, scan.remissions))
+        self.merged.label = np.concatenate((self.merged.label, scan.label))
+        self.merged.label_color = np.concatenate((self.merged.label_color, scan.label_color))
 
         # After accumulating all scans then undo the pose and then do range projection
-      self.joint_scan.apply_inv_pose()
-      self.joint_scan.do_range_projection_new(self.fov_up, self.fov_down, remove=True)
-      self.joint_scan.do_label_projection_new()
-      self.joint_scan.do_reverse_projection_new(self.fov_up, self.fov_down)
+      self.merged.apply_inv_pose()
+      self.merged.do_range_projection_new(self.fov_up, self.fov_down, remove=True)
+      self.merged.do_label_projection_new()
+      self.merged.do_reverse_projection_new(self.fov_up, self.fov_down)
+      self.merged
         return [], [], []
 
     elif adaption == 'mesh':
@@ -759,6 +760,47 @@ class MultiSemLaserScan():
         # scan.do_reverse_projection_new(self.fov_up, self.fov_down)
         tsdf_vol.integrate(scan.proj_color*255, scan.proj_range, np.eye(3), obs_weight=1.)
       fps = self.nscans/(time.time()-t0_elapse)
+      print("Average FPS: %.2f"%(fps))
+
+      rays = self.create_rays()
+      origin = np.array([0, 0, 0]).astype(np.float32)
+      t0_elapse = time.time()
+      self.ray_endpoints, self.ray_colors, verts, colors, faces, self.range_image = tsdf_vol.throw_rays_at_mesh(rays, origin, self.H, self.W, self.scans[0].color_lut)
+      rps = len(rays)/(time.time()-t0_elapse)
+      print("Average Rays per sec: %.2f"%(rps))
+      return verts, colors, faces
+
+    # Adapt mesh from merged scans
+    elif adaption == 'mergemesh':
+      self.merged = SemLaserScan(self.H, self.W, self.nclasses, self.color_dict,
+                                     self.transformation, self.beam_angles)
+      self.merged.reset()
+      self.merged.pose = poses[idx]
+      
+      # Merge scans into a single scan
+      for scan in self.scans:
+        self.merged.points = np.concatenate((self.merged.points, scan.points))
+        self.merged.remissions = np.concatenate((self.merged.remissions, scan.remissions))
+        self.merged.label = np.concatenate((self.merged.label, scan.label))
+        self.merged.label_color = np.concatenate((self.merged.label_color, scan.label_color))
+
+      # After accumulating all scans then undo the pose and then do range projection
+      self.merged.apply_inv_pose()
+      self.merged.do_range_projection_new(self.fov_up, self.fov_down, remove=True)
+      self.merged.do_label_projection_new()
+
+      vol_bnds = self.vol_bnds
+      # Automatically set voxel bounds by examining the complete point cloud
+      if vol_bnds.all() == None:
+        vol_bnds = self.merged.get_bnds()
+
+      # TODO Limit range of scans
+      print("Initializing voxel volume...")
+      tsdf_vol = fl.TSDFVolume(vol_bnds, voxel_size=self.voxel_size, fov_up=self.fov_up, fov_down=self.fov_down)
+
+      t0_elapse = time.time()
+      tsdf_vol.integrate(self.merged.proj_color*255, self.merged.proj_range, np.eye(3), obs_weight=1.)
+      fps = 1.0/(time.time()-t0_elapse)
       print("Average FPS: %.2f"%(fps))
 
       rays = self.create_rays()

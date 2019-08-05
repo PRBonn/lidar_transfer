@@ -141,8 +141,8 @@ class LaserScanVis():
   def set_laserscans(self, scan):
     # plot range
     if hasattr(scan.get_scan(0), 'label_color'):
-      label_color = scan.joint_scan.label_color_image.reshape(-1,3)
-      points = scan.joint_scan.back_points.reshape(-1,3)
+      label_color = scan.merged.label_color_image.reshape(-1,3)
+      points = scan.merged.back_points.reshape(-1,3)
       self.back_vis.set_data(points,
                              face_color=label_color[..., ::-1],
                              edge_color=label_color[..., ::-1],
