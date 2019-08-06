@@ -15,6 +15,7 @@ class LaserScanVis():
     self.H = H
     self.mesh = mesh
     self.frame = 0
+    self.nframes = 0
     self.reset()
 
   def reset(self):
@@ -141,7 +142,7 @@ class LaserScanVis():
     self.img_vis.update()
 
   def set_laserscans(self, scan):
-    self.scan_canvas.title = 'Frame %d'%(self.frame)
+    self.scan_canvas.title = 'Frame %d of %d'%(self.frame+1, self.nframes)
     # plot range
     if hasattr(scan.get_scan(0), 'label_color'):
       label_color = scan.merged.label_color_image.reshape(-1,3)

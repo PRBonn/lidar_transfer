@@ -428,7 +428,6 @@ class LaserScan:
     point_y = depth * np.sin(pitch) * np.sin(-yaw)
     point_z = depth * np.cos(pitch)
 
-
     # TODO fix weird transposing
     self.back_points = np.array([point_x, point_y, point_z]).transpose(1,2,0).reshape(-1,3)
 
@@ -833,7 +832,6 @@ class MultiSemLaserScan():
       print("\nAdaption method not recognized or not defined")
       quit()
 
-
   def get_label_map(self):
     """ converts RGB label to single sequential label index
     """
@@ -843,7 +841,7 @@ class MultiSemLaserScan():
     i = 0
     for idx, rgb in self.color_dict.items():
       label_map[(proj_color.astype(np.uint8)==rgb).all(2)] = i
-      i += 1  # encode label as sequqntial number
+      i += 1  # encode label as sequential number
     return label_map
 
   # TODO pass parameter for rays
@@ -902,6 +900,8 @@ class MultiSemLaserScan():
       label_file.write(byte_values)
     label_file.close()
 
+    # TODO write mesh?
+
+    # TODO write range_image and label_image?
     if range_image:
-      # TODO write range_image and label_image?
       print("Write range image")
