@@ -4,6 +4,7 @@ import vispy
 from vispy.scene import visuals, SceneCanvas
 import numpy as np
 from matplotlib import pyplot as plt
+from auxiliary.np_ioueval import iouEval
 
 
 class LaserScanVis():
@@ -13,6 +14,7 @@ class LaserScanVis():
     self.W = W
     self.H = H
     self.mesh = mesh
+    self.frame = 0
     self.reset()
 
   def reset(self):
@@ -22,7 +24,7 @@ class LaserScanVis():
     self.action = "no"  # no, next, back, quit are the possibilities
 
     # NEW canvas prepared for visualizing laserscan data
-    self.scan_canvas = SceneCanvas(keys='interactive', show=True, title='Original Point Cloud | Generated Point Cloud', size=(1600,600))
+    self.scan_canvas = SceneCanvas(keys='interactive', show=True, title='', size=(1600,600))
     self.scan_canvas.events.key_press.connect(self.key_press)
     self.grid_view = self.scan_canvas.central_widget.add_grid()
     
@@ -139,6 +141,7 @@ class LaserScanVis():
     self.img_vis.update()
 
   def set_laserscans(self, scan):
+    self.scan_canvas.title = 'Frame %d'%(self.frame)
     # plot range
     if hasattr(scan.get_scan(0), 'label_color'):
       label_color = scan.merged.label_color_image.reshape(-1,3)
@@ -183,14 +186,35 @@ class LaserScanVis():
   def set_diff(self, scan_source, scan_target):
     # Label intersection image
     source_label = scan_source.proj_color[..., ::-1]
+    source_label_map = scan_source.get_label_map()
+
     if scan_target.adaption == 'cp':
-      # TODO use all available scans
-      target_label = scan_target.get_scan(0).proj_color[..., ::-1]
+      target_label_map = scan_target.merged.get_label_map()
+      target_label = scan_target.merged.proj_color[..., ::-1]
     else:
       target_label = scan_target.ray_colors.reshape(64, -1, 3)/255
+      target_label_map = scan_target.get_label_map()
+
+    # Mask out no data (= black) in target scan
     black = np.sum(source_label, axis=2) == 0
     black = np.repeat(black[:, :, np.newaxis], 3, axis=2)
     target_label[black] = 0
+    black = source_label_map == 0
+    target_label_map[black] = 0
+
+    # Ignore empty classes
+    unique_values = np.unique(source_label_map)
+    empty = np.isin(np.arange(scan_source.nclasses), unique_values) == False
+    
+    # Evaluate by label
+    eval = iouEval(scan_source.nclasses, np.arange(scan_source.nclasses)[empty])
+    eval.addBatch(target_label_map, source_label_map)
+    m_iou, iou = eval.getIoU()
+    print("IoU: ", m_iou)
+    print("IoU class: ", (iou*100).astype(int))
+    m_acc = eval.getacc()
+    print("Acc: ", m_acc)
+
     label_diff = abs(source_label-target_label)
     self.diff_image_label.set_data(label_diff)
     self.diff_image_label.update()
@@ -198,17 +222,28 @@ class LaserScanVis():
     # Range diff image
     source_range = scan_source.proj_range
     if scan_target.adaption == 'cp':
-      # TODO use all available scans
-      target_range = scan_target.get_scan(0).proj_range
+      target_range = scan_target.merged.proj_range
     else:
       target_range = scan_target.range_image
+    # Mask out no data (= black) in target scan
     black = source_range == 0
-    target_range[black] = 0
-    range_diff = abs(source_range-target_range)
+    # target_range[black] = 0
+
+    # Mask out too far data in target scan
+    too_far = source_range >= 50
+    source_range[too_far] = 0
+    target_range[too_far] = 0
+
+    print(np.amax(source_range))
+
+    range_diff = (source_range-target_range) ** 2
+
     self.diff_image_depth.set_data(range_diff)
     self.diff_image_depth.update()
 
-    # self.diff_canvas.title = 'LOL'
+    MSE = range_diff.sum() / range_diff.size
+
+    self.diff_canvas.title = 'IoU %5.2f%%, Acc %5.2f%%, MSE %f'%(m_iou*100.0, m_acc*100, MSE)
 
   def set_mesh(self, verts, verts_colors, faces):
     if self.mesh:

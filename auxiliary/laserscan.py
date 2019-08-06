@@ -474,6 +474,7 @@ class SemLaserScan(LaserScan):
     super(SemLaserScan, self).__init__(H, W, transformation, beam_angles)
     self.reset()
     self.nclasses = nclasses         # number of classes
+    self.color_dict = color_dict
 
     # make colors
     max_key = 0
@@ -610,6 +611,17 @@ class SemLaserScan(LaserScan):
     amax = np.amax(self.points, axis=0)
     return np.concatenate((amin.reshape(3,1),amax.reshape(3,1)),axis=1)
 
+  def get_label_map(self):
+    """ converts RGB label to single sequential label index
+    """
+    label_map = np.ndarray(shape=self.proj_color.shape[:2], dtype=int)
+    label_map[:,:] = -1
+    i = 0
+    for idx, rgb in self.color_dict.items():
+      label_map[((self.proj_color*255).astype(np.uint8)==rgb).all(2)] = i
+      i += 1  # encode label as sequqntial number
+    return label_map
+
   def torch(self):
     super(SemLaserScan, self).torch()
     # pass label to pytorch in [1, m] shape (channel first)
@@ -741,23 +753,25 @@ class MultiSemLaserScan():
           vol_bnds = np.concatenate((np.minimum(bnds[:,0],vol_bnds[:,0]).reshape(3,1),
                                      np.maximum(bnds[:,1],vol_bnds[:,1]).reshape(3,1)),
                                      axis=1)
+        print(vol_bnds)
+      t0_elapse = time.time()
       for i, scan in enumerate(self.scans):
         print("Create range image %d/%d"%(i+1,self.nscans))
         # Undo the primary pose and then do range projection
         scan.apply_transformation(np.linalg.inv(poses[idx]))
         scan.do_range_projection_new(self.fov_up, self.fov_down, remove=True)
         scan.do_label_projection_new()
+        # TODO Limit range of scans instead of limit the voxel grid volume
+      fps = self.nscans/(time.time()-t0_elapse)
+      print("Average FPS: %.2f"%(fps))
 
-      # TODO Limit range of scans
       print("Initializing voxel volume...")
       tsdf_vol = fl.TSDFVolume(vol_bnds, voxel_size=self.voxel_size, fov_up=self.fov_up, fov_down=self.fov_down)
 
       t0_elapse = time.time()
       for i, scan in enumerate(self.scans):
         print("Fusing scan %d/%d"%(i+1,self.nscans))
-        # scan.do_range_projection_new(self.fov_up, self.fov_down, remove=True)
-        # scan.do_label_projection_new()
-        # scan.do_reverse_projection_new(self.fov_up, self.fov_down)
+        # Pose transformation already applied
         tsdf_vol.integrate(scan.proj_color*255, scan.proj_range, np.eye(3), obs_weight=1.)
       fps = self.nscans/(time.time()-t0_elapse)
       print("Average FPS: %.2f"%(fps))
@@ -794,7 +808,6 @@ class MultiSemLaserScan():
       if vol_bnds.all() == None:
         vol_bnds = self.merged.get_bnds()
 
-      # TODO Limit range of scans
       print("Initializing voxel volume...")
       tsdf_vol = fl.TSDFVolume(vol_bnds, voxel_size=self.voxel_size, fov_up=self.fov_up, fov_down=self.fov_down)
 
@@ -819,6 +832,19 @@ class MultiSemLaserScan():
       # Error
       print("\nAdaption method not recognized or not defined")
       quit()
+
+
+  def get_label_map(self):
+    """ converts RGB label to single sequential label index
+    """
+    proj_color = self.ray_colors.reshape(self.H, self.W, 3)
+    label_map = np.ndarray(shape=proj_color.shape[:2], dtype=int)
+    label_map[:,:] = -1
+    i = 0
+    for idx, rgb in self.color_dict.items():
+      label_map[(proj_color.astype(np.uint8)==rgb).all(2)] = i
+      i += 1  # encode label as sequqntial number
+    return label_map
 
   # TODO pass parameter for rays
   def create_rays(self):
