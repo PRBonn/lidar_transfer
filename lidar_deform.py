@@ -139,6 +139,24 @@ if __name__ == '__main__':
     print("Error opening yaml file.")
     quit()
 
+  # does output folder and subfolder exists?
+  if os.path.isdir(FLAGS.output):
+    out_scan_paths = os.path.join(FLAGS.output, "velodyne")
+    out_label_paths = os.path.join(FLAGS.output, "labels")
+    if os.path.isdir(out_scan_paths) and os.path.isdir(out_label_paths):
+      print("Output folder with subfolder exists! %s" % FLAGS.output)
+      if os.listdir(out_scan_paths):
+        print("Output folder velodyne is not empty! Data will be overwritten!")
+      if os.listdir(out_label_paths):
+        print("Output folder label is not empty! Data will be overwritten!")
+    else:
+      os.mkdir(out_scan_paths)
+      os.mkdir(out_label_paths)
+      print("Created subfolder in output folder %s!" % FLAGS.output)
+  else:
+    print("Output folder doesn't exist! Exiting...")
+    quit()
+
   # does sequence folder exist?
   scan_paths = os.path.join(FLAGS.dataset, "sequences",
                             FLAGS.sequence, "velodyne")
@@ -178,7 +196,7 @@ if __name__ == '__main__':
     scan_config = yaml.safe_load(open(scan_config_path, 'r'))
   except Exception as e:
     print(e)
-    print("Error opening yaml file.")
+    print("Error opening config.yaml file %s." % scan_config_path)
     quit()
 
   # read calib.txt of dataset
@@ -237,7 +255,7 @@ if __name__ == '__main__':
     target_config = yaml.safe_load(open(FLAGS.target, 'r'))
   except Exception as e:
     print(e)
-    print("Error opening yaml file.")
+    print("Error opening target yaml file %." & FLAGS.target)
     quit()
 
   # target parameter to deform to
@@ -301,7 +319,10 @@ if __name__ == '__main__':
   batch = FLAGS.batch
   # create a visualizer
   if batch is False:
-    vis = LaserScanVis([W, t_W], [beams, t_beams])
+    show_diff = False
+    if t_beams == beams:
+      show_diff = True  # show diff only if comparison is possible
+    vis = LaserScanVis([W, t_W], [beams, t_beams], show_diff=show_diff)
     vis.nframes = len(scan_names)
 
   # print instructions
@@ -349,7 +370,6 @@ if __name__ == '__main__':
         quit()
 
     # Export backprojected point cloud (+ range image)
-    # TODO check folder existence earlier
     # scans.write(FLAGS.output, idx)
 
     if batch:

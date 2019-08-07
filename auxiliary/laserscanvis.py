@@ -10,12 +10,13 @@ from auxiliary.np_ioueval import iouEval
 class LaserScanVis():
   """Class that creates and handles a visualizer for a pointcloud"""
 
-  def __init__(self, W, H, mesh=False):
+  def __init__(self, W, H, mesh=False, show_diff=False):
     self.W = W
     self.H = H
     self.mesh = mesh
     self.frame = 0
     self.nframes = 0
+    self.show_diff = show_diff
     self.reset()
 
   def reset(self):
@@ -70,6 +71,7 @@ class LaserScanVis():
     self.test_view.add(self.test_vis)
 
     # NEW canvas for showing difference in range and labels
+    if self.show_diff:
     self.diff_canvas = SceneCanvas(keys='interactive', show=True,
                                    title='Difference Range Image',
                                    size=(self.W[1], self.H[1]*2))
@@ -197,6 +199,9 @@ class LaserScanVis():
     self.test_vis.update()
 
   def set_diff(self, scan_source, scan_target):
+    if not self.show_diff:
+      return
+
     # Label intersection image
     source_label = scan_source.proj_color[..., ::-1]
     source_label_map = scan_source.get_label_map()
@@ -205,7 +210,7 @@ class LaserScanVis():
       target_label_map = scan_target.merged.get_label_map()
       target_label = scan_target.merged.proj_color[..., ::-1]
     else:
-      target_label = scan_target.ray_colors.reshape(64, -1, 3)/255
+      target_label = scan_target.ray_colors.reshape(self.H[0], -1, 3) / 255
       target_label_map = scan_target.get_label_map()
 
     # Mask out no data (= black) in target scan
