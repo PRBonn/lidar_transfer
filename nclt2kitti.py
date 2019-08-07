@@ -6,6 +6,7 @@ import numpy as np
 import os
 from pathlib import Path
 
+
 def progressbar(name, value, endvalue, bar_length=50):
   percent = float(value) / endvalue
   arrow = '-' * int(round(percent * bar_length) - 1) + '|'
@@ -16,11 +17,12 @@ def progressbar(name, value, endvalue, bar_length=50):
                    name, value, arrow + spaces, int(round(percent * 100))))
   sys.stdout.flush()
 
+
 def convert(x_s, y_s, z_s):
     # - Data was recorded as a 2 bytes.
     # - Distances are scaled to an integer between 0 and 40 000 by adding 100 m
     #   to each distance and discretizing the result at 5 mm
-    scaling = 0.005 # 5 mm
+    scaling = 0.005  # 5 mm
     offset = -100.0
     x = x_s * scaling + offset
     y = y_s * scaling + offset
@@ -34,7 +36,7 @@ if __name__ == "__main__":
     if len(sys.argv) < 3:
         print("Usage: ./nclt2kitty.py <input_dir> <output_dir> <scene_name>")
         exit(1)
-    
+
     # read parameter
     input_dir = Path(sys.argv[1])
     output_dir = Path(sys.argv[2])
@@ -59,10 +61,12 @@ if __name__ == "__main__":
         progressbar("Scan", idx, len(scan_files))
 
         f_bin = open(file, "rb")
-        out_file = open(os.path.join(scene_dir, "velodyne", str(idx).zfill(6)+".bin"), "wb")
+        out_file = open(
+            os.path.join(scene_dir, "velodyne", str(idx).zfill(6) + ".bin"),
+            "wb")
         while True:
             x_str = f_bin.read(2)
-            if x_str == '': # eof
+            if x_str == '':  # eof
                 break
 
             try:

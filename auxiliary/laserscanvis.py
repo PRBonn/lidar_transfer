@@ -26,7 +26,7 @@ class LaserScanVis():
 
     # NEW canvas prepared for visualizing laserscan data
     self.scan_canvas = SceneCanvas(
-      keys='interactive', show=True, title='', size=(1600,600))
+        keys='interactive', show=True, title='', size=(1600, 600))
     self.scan_canvas.events.key_press.connect(self.key_press)
     self.grid_view = self.scan_canvas.central_widget.add_grid()
     
@@ -154,7 +154,7 @@ class LaserScanVis():
     self.img_vis.update()
 
   def set_laserscans(self, scan):
-    self.scan_canvas.title = 'Frame %d of %d'%(self.frame+1, self.nframes)
+    self.scan_canvas.title = 'Frame %d of %d' % (self.frame + 1, self.nframes)
     # plot range
     if hasattr(scan.get_scan(0), 'label_color'):
       label_color = scan.merged.label_color_image.reshape(-1,3)
@@ -217,18 +217,18 @@ class LaserScanVis():
 
     # Ignore empty classes
     unique_values = np.unique(source_label_map)
-    empty = np.isin(np.arange(scan_source.nclasses), unique_values) == False
+    empty = np.isin(np.arange(scan_source.nclasses), unique_values) is False
     
     # Evaluate by label
     eval = iouEval(scan_source.nclasses, np.arange(scan_source.nclasses)[empty])
     eval.addBatch(target_label_map, source_label_map)
     m_iou, iou = eval.getIoU()
     print("IoU: ", m_iou)
-    print("IoU class: ", (iou*100).astype(int))
+    print("IoU class: ", (iou * 100).astype(int))
     m_acc = eval.getacc()
     print("Acc: ", m_acc)
 
-    label_diff = abs(source_label-target_label)
+    label_diff = abs(source_label - target_label)
     self.diff_image_label.set_data(label_diff)
     self.diff_image_label.update()
 
@@ -249,7 +249,7 @@ class LaserScanVis():
 
     print(np.amax(source_range))
 
-    range_diff = (source_range-target_range) ** 2
+    range_diff = (source_range - target_range) ** 2
 
     self.diff_image_depth.set_data(range_diff)
     self.diff_image_depth.update()
@@ -257,7 +257,7 @@ class LaserScanVis():
     MSE = range_diff.sum() / range_diff.size
 
     self.diff_canvas.title = \
-      'IoU %5.2f%%, Acc %5.2f%%, MSE %f'%(m_iou*100.0, m_acc*100, MSE)
+        'IoU %5.2f%%, Acc %5.2f%%, MSE %f' % (m_iou * 100.0, m_acc * 100, MSE)
 
   def set_mesh(self, verts, verts_colors, faces):
     if self.mesh:
@@ -268,7 +268,7 @@ class LaserScanVis():
 
   def set_points(self, points, colors, W, H):
     # plot range
-    colors = colors/255
+    colors = colors / 255
     self.back_vis.set_data(points,
                             face_color=colors,
                             edge_color=colors,

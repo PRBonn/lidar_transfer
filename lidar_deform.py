@@ -7,6 +7,7 @@ import numpy as np
 from auxiliary.laserscan import LaserScan, SemLaserScan, MultiSemLaserScan
 from auxiliary.laserscanvis import LaserScanVis
 
+
 def parse_calibration(filename):
   """ read calibration file with given filename
 
@@ -110,6 +111,12 @@ if __name__ == '__main__':
       default="output/",
       help='Output folder to write bin files to. Defaults to %(default)s',
   )
+  parser.add_argument(
+      '--batch', '-b',
+      action='store_true',
+      required=False,
+      help='Run in batch mode.',
+  )
   FLAGS, unparsed = parser.parse_known_args()
 
   # print summary of what we will do
@@ -120,6 +127,7 @@ if __name__ == '__main__':
   print("Sequence", FLAGS.sequence)
   print("Target", FLAGS.target)
   print("offset", FLAGS.offset)
+  print("batch mode", FLAGS.batch)
   print("*" * 80)
 
   # open config file
@@ -200,7 +208,8 @@ if __name__ == '__main__':
   # projection = scan_config['projection']
   fov_up = scan_config['fov_up']
   fov_down = scan_config['fov_down']
-  beams = scan_config['beams'] # TODO change to more general description height?
+  # TODO change to more general description height?
+  beams = scan_config['beams']
   angle_res_hor = scan_config['angle_res_hor']
   fov_hor = scan_config['fov_hor']
   try:
@@ -236,7 +245,7 @@ if __name__ == '__main__':
   # t_projection = target_config['projection']
   t_fov_up = target_config['fov_up']
   t_fov_down = target_config['fov_down']
-  t_beams = target_config['beams'] # TODO change to more general description height?
+  t_beams = target_config['beams']  # TODO see above
   t_angle_res_hor = target_config['angle_res_hor']
   t_fov_hor = target_config['fov_hor']
   t_W = int(t_fov_hor / t_angle_res_hor)
@@ -247,7 +256,7 @@ if __name__ == '__main__':
     print("No beam angles in target config: calculate equidistant angles")
 
   # Approach parameter
-  adaption = CFG["adaption"]  #['mesh', 'catmesh', 'cp']
+  adaption = CFG["adaption"]  # ['mesh', 'catmesh', 'cp']
   voxel_size = CFG["voxel_size"]
   voxel_bounds = np.array(CFG["voxel_bounds"])
   nscans = CFG["number_of_scans"]
@@ -275,7 +284,7 @@ if __name__ == '__main__':
   print("*" * 80)
 
   try:
-    voxel_bounds = voxel_bounds.reshape(3,2)
+    voxel_bounds = voxel_bounds.reshape(3, 2)
   except Exception as e:
     print("No voxel boundaries set")
 
@@ -289,8 +298,11 @@ if __name__ == '__main__':
                             transformation=transformation,
                             voxel_size=voxel_size, vol_bnds=voxel_bounds)
 
+  batch = FLAGS.batch
   # create a visualizer
-  vis = LaserScanVis([W, t_W], [beams, t_beams])
+  if batch is False:
+    vis = LaserScanVis([W, t_W], [beams, t_beams])
+    vis.nframes = len(scan_names)
 
   # print instructions
   print("To navigate:")
@@ -308,50 +320,58 @@ if __name__ == '__main__':
     # open multiple scans
     scans.open_multiple_scans(scan_names, label_names, poses, idx)
 
+    # run approach
     verts, verts_colors, faces = scans.deform(adaption, poses, idx)
+
+    if batch is False:
+      # pass to visualizer
+      vis.frame = idx
+      vis.set_laserscan(scan)
+      if adaption == 'cp':  # closest point
+        vis.set_laserscans(scans)
+        vis.set_diff(scan, scans)
+      elif adaption == 'mesh':
+        vis.show_mesh(True)
+        vis.set_points(scans.ray_endpoints, scans.ray_colors, t_W, t_beams)
+        vis.set_mesh(verts, verts_colors / 255, faces)
+        vis.set_diff(scan, scans)
+      elif adaption == 'mergemesh':
+        vis.show_mesh(True)
+        vis.set_points(scans.ray_endpoints, scans.ray_colors, t_W, t_beams)
+        vis.set_mesh(verts, verts_colors / 255, faces)
+        vis.set_diff(scan, scans)
+      elif adaption == 'catmesh':
+        # TODO Category Mesh
+        quit()
+      else:
+        # Error
+        print("\nAdaption method not recognized or not defined")
+        quit()
 
     # Export backprojected point cloud (+ range image)
     # TODO check folder existence earlier
     # scans.write(FLAGS.output, idx)
 
-    # pass to visualizer
-    vis.set_laserscan(scan)
-    # vis.set_laserscan2(scan2)
-    if adaption == 'cp': # closest point
-      vis.set_laserscans(scans)
-      vis.set_diff(scan, scans)
-    elif adaption == 'mesh':
-      vis.show_mesh(True)
-      vis.set_points(scans.ray_endpoints, scans.ray_colors, t_W, t_beams)
-      vis.set_mesh(verts, verts_colors/255, faces)
-      vis.set_diff(scan, scans)
-      elif adaption == 'mergemesh':
-        vis.show_mesh(True)
-        vis.set_points(scans.ray_endpoints, scans.ray_colors, t_W, t_beams)
-        vis.set_mesh(verts, verts_colors/255, faces)
-        vis.set_diff(scan, scans)
-    elif adaption == 'catmesh':
-      # TODO Category Mesh
-      quit()
+    if batch:
+      idx = (idx + 1) % (len(scan_names) - (nscans - 1))
+      if idx == 0:
+        quit()
+      print("#" * 10, idx, "/", len(scan_names), "#" * 10)
     else:
-      # Error
-      print("\nAdaption method not recognized or not defined")
-      quit()
-
-    # get user choice
-    while True:
-      choice = vis.get_action(0.01)
-      if choice != "no":
-        break
-    if choice == "next":
-      # take into account that we look further than one scan
-      idx = (idx + 1) % (len(scan_names) - nscans)
-      continue
-    if choice == "back":
-      idx -= 1
-      if idx < 0:
-        idx = len(scan_names) - 1
-      continue
-    elif choice == "quit":
-      print()
+      # get user choice
+      while True:
+        choice = vis.get_action(0.01)
+        if choice != "no":
+          break
+      if choice == "next":
+        # take into account that we look further than one scan
+        idx = (idx + 1) % (len(scan_names) - (nscans - 1))
+        continue
+      if choice == "back":
+        idx -= 1
+        if idx < 0:
+          idx = len(scan_names) - 1
+        continue
+      elif choice == "quit":
+        print()
       break
