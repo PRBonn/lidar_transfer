@@ -398,7 +398,7 @@ class LaserScan:
 
     # transform into 3D
     yaw = (proj_x * 2 - 1.0) * np.pi # theta
-    pitch = np.pi/2 - (1.0 * fov - proj_y * fov - abs(fov_down)) # pitch = 90 - phi
+    pitch = np.pi/2 - (1.0 * fov - proj_y * fov - abs(fov_down)) # pitch = 90-phi
     point_x = depth * np.sin(pitch) * np.cos(-yaw)
     point_y = depth * np.sin(pitch) * np.sin(-yaw)
     point_z = depth * np.cos(pitch)

@@ -25,12 +25,14 @@ class LaserScanVis():
     self.action = "no"  # no, next, back, quit are the possibilities
 
     # NEW canvas prepared for visualizing laserscan data
-    self.scan_canvas = SceneCanvas(keys='interactive', show=True, title='', size=(1600,600))
+    self.scan_canvas = SceneCanvas(
+      keys='interactive', show=True, title='', size=(1600,600))
     self.scan_canvas.events.key_press.connect(self.key_press)
     self.grid_view = self.scan_canvas.central_widget.add_grid()
     
     # source laserscan
-    self.scan_view = vispy.scene.widgets.ViewBox(border_color='white', parent=self.scan_canvas.scene)
+    self.scan_view = vispy.scene.widgets.ViewBox(
+      border_color='white', parent=self.scan_canvas.scene)
     self.scan_vis = visuals.Markers()
     self.scan_view.camera = 'turntable'
     self.scan_view.add(self.scan_vis)
@@ -38,7 +40,8 @@ class LaserScanVis():
     self.grid_view.add_widget(self.scan_view, 0, 0)
 
     # target laserscan
-    self.back_view = vispy.scene.widgets.ViewBox(border_color='white', parent=self.scan_canvas.scene)
+    self.back_view = vispy.scene.widgets.ViewBox(
+      border_color='white', parent=self.scan_canvas.scene)
     self.back_vis = visuals.Markers()
     self.back_view.camera = 'turntable'
     self.back_view.camera.link(self.scan_view.camera)
@@ -49,31 +52,39 @@ class LaserScanVis():
     # self.grid_view.padding = 6
 
     # NEW canvas for range img data
-    self.img_canvas = SceneCanvas(
-        keys='interactive', show=True, size=(self.W[0], self.H[0]), title='Original Range Image')
+    self.img_canvas = SceneCanvas(keys='interactive', show=True,
+                                  title='Original Range Image',
+                                  size=(self.W[0], self.H[0]))
     self.img_canvas.events.key_press.connect(self.key_press)
     self.img_view = self.img_canvas.central_widget.add_view()
     self.img_vis = visuals.Image(cmap='viridis')
     self.img_view.add(self.img_vis)
 
     # NEW test canvas
-    self.test_canvas = SceneCanvas(keys='interactive', show=True, size=(self.W[1], self.H[1]), title='Test Range Image')
+    self.test_canvas = SceneCanvas(keys='interactive', show=True,
+                                   title='Test Range Image',
+                                   size=(self.W[1], self.H[1]))
     self.test_canvas.events.key_press.connect(self.key_press)
     self.test_view = self.test_canvas.central_widget.add_view()
     self.test_vis = visuals.Image(cmap='viridis')
     self.test_view.add(self.test_vis)
 
     # NEW canvas for showing difference in range and labels
-    self.diff_canvas = SceneCanvas(keys='interactive', show=True, size=(self.W[1], self.H[1]*2), title='Difference Range Image')
+    self.diff_canvas = SceneCanvas(keys='interactive', show=True,
+                                   title='Difference Range Image',
+                                   size=(self.W[1], self.H[1]*2))
     self.diff_canvas.events.key_press.connect(self.key_press)
     self.diff_view = self.diff_canvas.central_widget.add_grid()
 
-    self.diff_view_depth = vispy.scene.widgets.ViewBox(border_color='white', parent=self.diff_canvas.scene)
-    self.diff_image_depth = visuals.Image(cmap='viridis')
+    self.diff_view_depth = vispy.scene.widgets.ViewBox(
+      border_color='white', parent=self.diff_canvas.scene)
+    # self.diff_image_depth = visuals.Image(cmap='viridis')
+    self.diff_image_depth = visuals.Image()
     self.diff_view_depth.add(self.diff_image_depth)
     self.diff_view.add_widget(self.diff_view_depth, 0, 0)
 
-    self.diff_view_label = vispy.scene.widgets.ViewBox(border_color='white', parent=self.diff_canvas.scene)
+    self.diff_view_label = vispy.scene.widgets.ViewBox(
+      border_color='white', parent=self.diff_canvas.scene)
     self.diff_image_label = visuals.Image(cmap='viridis')
     self.diff_view_label.add(self.diff_image_label)
     self.diff_view.add_widget(self.diff_view_label, 1, 0)
@@ -91,7 +102,8 @@ class LaserScanVis():
 
   def show_mesh(self, show_mesh_):
     self.mesh = show_mesh_
-    self.mesh_view = vispy.scene.widgets.ViewBox(border_color='white', parent=self.scan_canvas.scene)
+    self.mesh_view = vispy.scene.widgets.ViewBox(
+      border_color='white', parent=self.scan_canvas.scene)
     self.mesh_vis = visuals.Mesh(shading=None)
     self.mesh_view.camera = 'turntable'
     self.mesh_view.camera.link(self.scan_view.camera)
@@ -244,7 +256,8 @@ class LaserScanVis():
 
     MSE = range_diff.sum() / range_diff.size
 
-    self.diff_canvas.title = 'IoU %5.2f%%, Acc %5.2f%%, MSE %f'%(m_iou*100.0, m_acc*100, MSE)
+    self.diff_canvas.title = \
+      'IoU %5.2f%%, Acc %5.2f%%, MSE %f'%(m_iou*100.0, m_acc*100, MSE)
 
   def set_mesh(self, verts, verts_colors, faces):
     if self.mesh:
@@ -264,7 +277,6 @@ class LaserScanVis():
 
     # plot range image test
     self.test_vis.set_data(colors.reshape(H,W,3))
-
     self.test_vis.update()
 
   # interface
