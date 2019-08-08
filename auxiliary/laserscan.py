@@ -632,7 +632,7 @@ class SemLaserScan(LaserScan):
     i = 0
     for idx, rgb in self.color_dict.items():
       label_map[((self.proj_color * 255).astype(np.uint8) == rgb).all(2)] = i
-      i += 1  # encode label as sequqntial number
+      i += 1  # encode label as sequential number
     return label_map
 
   def torch(self):
