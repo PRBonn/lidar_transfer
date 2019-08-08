@@ -10,13 +10,14 @@ from auxiliary.np_ioueval import iouEval
 class LaserScanVis():
   """Class that creates and handles a visualizer for a pointcloud"""
 
-  def __init__(self, W, H, mesh=False, show_diff=False):
+  def __init__(self, W, H, mesh=False, show_diff=False, show_range=False):
     self.W = W
     self.H = H
     self.mesh = mesh
     self.frame = 0
     self.nframes = 0
     self.show_diff = show_diff
+    self.show_range = show_range
     self.reset()
 
   def reset(self):
@@ -31,7 +32,7 @@ class LaserScanVis():
     self.scan_canvas.events.key_press.connect(self.key_press)
     self.grid_view = self.scan_canvas.central_widget.add_grid()
     
-    # source laserscan
+    # source laserscan 3D
     self.scan_view = vispy.scene.widgets.ViewBox(
       border_color='white', parent=self.scan_canvas.scene)
     self.scan_vis = visuals.Markers()
@@ -40,7 +41,7 @@ class LaserScanVis():
     visuals.XYZAxis(parent=self.scan_view.scene)
     self.grid_view.add_widget(self.scan_view, 0, 0)
 
-    # target laserscan
+    # target laserscan 3D
     self.back_view = vispy.scene.widgets.ViewBox(
       border_color='white', parent=self.scan_canvas.scene)
     self.back_vis = visuals.Markers()
@@ -52,29 +53,49 @@ class LaserScanVis():
 
     # self.grid_view.padding = 6
 
-    # NEW canvas for range img data
+    # NEW canvas for range img data 2D
     self.img_canvas = SceneCanvas(keys='interactive', show=True,
-                                  title='Original Range Image',
+                                  title='Original Label Image',
                                   size=(self.W[0], self.H[0]))
     self.img_canvas.events.key_press.connect(self.key_press)
     self.img_view = self.img_canvas.central_widget.add_view()
     self.img_vis = visuals.Image(cmap='viridis')
     self.img_view.add(self.img_vis)
 
-    # NEW test canvas
+    # NEW test canvas 2D
     self.test_canvas = SceneCanvas(keys='interactive', show=True,
-                                   title='Test Range Image',
+                                   title='Test Label Image',
                                    size=(self.W[1], self.H[1]))
     self.test_canvas.events.key_press.connect(self.key_press)
     self.test_view = self.test_canvas.central_widget.add_view()
     self.test_vis = visuals.Image(cmap='viridis')
     self.test_view.add(self.test_vis)
 
+    if self.show_range:
+      self.range_canvas = SceneCanvas(keys='interactive', show=True,
+                                      title='Range Image',
+                                      size=(self.W[1], self.H[1] * 2))
+      self.range_canvas.events.key_press.connect(self.key_press)
+      self.range_view = self.range_canvas.central_widget.add_grid()
+
+      self.range_view_source = vispy.scene.widgets.ViewBox(
+          border_color='white', parent=self.range_canvas.scene)
+      # self.range_image_source = visuals.Image(cmap='viridis')
+      self.range_image_source = visuals.Image()
+      self.range_view_source.add(self.range_image_source)
+      self.range_view.add_widget(self.range_view_source, 0, 0)
+
+      self.range_view_target = vispy.scene.widgets.ViewBox(
+          border_color='white', parent=self.range_canvas.scene)
+      self.range_image_target = visuals.Image(cmap='viridis')
+      self.range_view_target.add(self.range_image_target)
+      self.range_view.add_widget(self.range_view_target, 1, 0)
+
     # NEW canvas for showing difference in range and labels
     if self.show_diff:
     self.diff_canvas = SceneCanvas(keys='interactive', show=True,
                                    title='Difference Range Image',
-                                   size=(self.W[1], self.H[1]*2))
+                                     size=(self.W[1], self.H[1] * 2))
     self.diff_canvas.events.key_press.connect(self.key_press)
     self.diff_view = self.diff_canvas.central_widget.add_grid()
 
@@ -143,24 +164,16 @@ class LaserScanVis():
     if hasattr(scan, 'proj_color'):
       self.img_vis.set_data(scan.proj_color[..., ::-1])
     else:
-      # print()
-      data = np.copy(scan.proj_range)
-      # print(data[data > 0].max(), data[data > 0].min())
-      data[data > 0] = data[data > 0]**(1 / power)
-      data[data < 0] = data[data > 0].min()
-      # print(data.max(), data.min())
-      data = (data - data[data > 0].min()) / \
-          (data.max() - data[data > 0].min())
-      # print(data.max(), data.min())
+      data = self.convert_range(scan.proj_range)
       self.img_vis.set_data(data)
     self.img_vis.update()
 
   def set_laserscans(self, scan):
     self.scan_canvas.title = 'Frame %d of %d' % (self.frame + 1, self.nframes)
-    # plot range
-    if hasattr(scan.get_scan(0), 'label_color'):
-      label_color = scan.merged.label_color_image.reshape(-1,3)
-      points = scan.merged.back_points.reshape(-1,3)
+    # plot 3D
+    if hasattr(scan.merged, 'label_color'):
+      label_color = scan.merged.label_color_image.reshape(-1, 3)
+      points = scan.merged.back_points.reshape(-1, 3)
       self.back_vis.set_data(points,
                              face_color=label_color[..., ::-1],
                              edge_color=label_color[..., ::-1],
@@ -182,21 +195,35 @@ class LaserScanVis():
                              size=3)
     self.back_vis.update()
 
-    # plot range image test
+    # plot label image test
     if hasattr(scan.get_scan(0), 'proj_color'):
-      self.test_vis.set_data(scan.get_scan(0).proj_color[..., ::-1])
+      self.test_vis.set_data(scan.merged.proj_color[..., ::-1])
     else:
       # print()
-      data = np.copy(scan.get_scan(0).proj_range)
-      # print(data[data > 0].max(), data[data > 0].min())
-      data[data > 0] = data[data > 0]**(1 / power)
-      data[data < 0] = data[data > 0].min()
-      # print(data.max(), data.min())
-      data = (data - data[data > 0].min()) / \
-          (data.max() - data[data > 0].min())
-      # print(data.max(), data.min())
+      data = self.convert_range(scan.get_scan(0).proj_range)
       self.test_vis.set_data(data)
     self.test_vis.update()
+
+  def set_data(self, scan_source, scan_target, verts=None, colors=None,
+               faces=None, W=None, H=None):
+    if self.show_diff:
+      pass
+    if self.show_range:
+      source_data = scan_source.proj_range
+      # source_data = self.convert_ranges(scan_source.proj_range)
+      if scan_target.adaption == 'cp':
+        target_range = scan_target.merged.proj_range
+      else:
+        target_range = scan_target.range_image
+      # target_data = self.convert_range(target_range)
+      target_data = target_range
+
+      self.range_image_source.set_data(source_data)
+      self.range_image_source.update()
+      self.range_image_target.set_data(target_data)
+      self.range_image_target.update()
+    if self.show_mesh:
+      pass
 
   def set_diff(self, scan_source, scan_target):
     if not self.show_diff:
@@ -222,15 +249,17 @@ class LaserScanVis():
 
     # Ignore empty classes
     unique_values = np.unique(source_label_map)
-    empty = np.isin(np.arange(scan_source.nclasses), unique_values) is False
+    empty = np.isin(np.arange(scan_source.nclasses), unique_values,
+                    invert=True)
     
     # Evaluate by label
-    eval = iouEval(scan_source.nclasses, np.arange(scan_source.nclasses)[empty])
+    eval = iouEval(scan_source.nclasses,
+                   np.arange(scan_source.nclasses)[empty])
     eval.addBatch(target_label_map, source_label_map)
     m_iou, iou = eval.getIoU()
-    print("IoU: ", m_iou)
     print("IoU class: ", (iou * 100).astype(int))
     m_acc = eval.getacc()
+    print("IoU: ", m_iou)
     print("Acc: ", m_acc)
 
     label_diff = abs(source_label - target_label)
@@ -248,21 +277,34 @@ class LaserScanVis():
     # target_range[black] = 0
 
     # Mask out too far data in target scan
-    too_far = source_range >= 50
-    source_range[too_far] = 0
-    target_range[too_far] = 0
+    # too_far = source_range >= 80
+    # source_range[too_far] = 0
+    # target_range[too_far] = 0
 
-    print(np.amax(source_range))
+    # print(np.amax(source_range))
 
     range_diff = (source_range - target_range) ** 2
 
+    data = self.convert_range(range_diff)
+    self.diff_image_depth.set_data(data)
     self.diff_image_depth.set_data(range_diff)
     self.diff_image_depth.update()
 
     MSE = range_diff.sum() / range_diff.size
+    print("MSE: ", MSE)
 
     self.diff_canvas.title = \
         'IoU %5.2f%%, Acc %5.2f%%, MSE %f' % (m_iou * 100.0, m_acc * 100, MSE)
+
+  def convert_range(self, range_image, power=16):
+    data = np.copy(range_image)
+    # print(data[data > 0].max(), data[data > 0].min())
+    data[data > 0] = data[data > 0]**(1 / power)
+    data[data < 0] = data[data > 0].min()
+    # print(data.max(), data.min())
+    data = (data - data[data > 0].min()) / \
+        (data.max() - data[data > 0].min())
+    return data
 
   def set_mesh(self, verts, verts_colors, faces):
     if self.mesh:
@@ -281,7 +323,7 @@ class LaserScanVis():
     self.back_vis.update()
 
     # plot range image test
-    self.test_vis.set_data(colors.reshape(H,W,3))
+    self.test_vis.set_data(colors.reshape(H, W, 3))
     self.test_vis.update()
 
   # interface

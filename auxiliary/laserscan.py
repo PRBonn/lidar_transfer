@@ -138,7 +138,7 @@ class LaserScan:
     self.remissions = scan[:, 3]  # get remission
 
     # if projection is wanted, then do it and fill in the structure
-    self.do_range_projection(fov_up, fov_down)
+    # self.do_range_projection(fov_up, fov_down)
 
   def remove_points(self, keep_index):
     self.points = self.points[keep_index]
@@ -533,7 +533,7 @@ class SemLaserScan(LaserScan):
     else:
       raise ValueError("Scan and Label don't contain same number of points")
 
-    self.do_label_projection()
+    # self.do_label_projection()
 
   def open_label_append(self, filename):
     """ Open raw scan and fill in attributes and appends it
