@@ -5,6 +5,7 @@ import struct
 import time
 import torch
 import auxiliary.fusion_lidar as fl
+from auxiliary.np_ioueval import iouEval
 
 
 class LaserScan:
@@ -71,12 +72,7 @@ class LaserScan:
     # transform with pose
     hom_points = np.ones((scan.shape[0], 4))
     hom_points[:, 0:3] = scan[:, 0:3]
-    # print(pose.shape, "x", hom_points.T.shape)
-    # print(pose.shape, "x", np.matmul(hom_points, pose).shape)
     t_points = np.matmul(pose, hom_points.T)
-    # t_points = np.matmul(np.linalg.inv(pose), np.matmul(pose, hom_points.T)).T
-    # t_points = np.matmul(np.matmul(hom_points, pose), np.linalg.inv(pose)).T
-    # print(t_points.shape)
     
     # Apply given transformation to move sensor to specific position/angle
     t_points = np.matmul(self.transformation, t_points).T
@@ -913,6 +909,10 @@ class MultiSemLaserScan():
     fov_up = self.fov_up
     fov_down = self.fov_down
 
+    # TODO pass parameter for rays
+
+    # TODO pass beam_angles
+
     # TODO Option to add noise to angle values
 
     # TODO Adapt speed from poses to reflect rolling shutter in rays
@@ -981,3 +981,61 @@ class MultiSemLaserScan():
     # TODO write range_image and label_image?
     if range_image:
       print("Write range image")
+
+
+def compare(scan_source, scan_target):
+  # Label intersection image
+  source_label = scan_source.proj_color[..., ::-1]
+  source_label_map = scan_source.get_label_map()
+
+  if scan_target.adaption == 'cp':
+    target_label_map = scan_target.merged.get_label_map()
+    target_label = scan_target.merged.proj_color[..., ::-1]
+  else:
+    target_label = scan_target.proj_color / 255
+    target_label_map = scan_target.get_label_map()
+
+  # Mask out no data (= black) in target scan
+  black = np.sum(source_label, axis=2) == 0
+  black = np.repeat(black[:, :, np.newaxis], 3, axis=2)
+  target_label[black] = 0
+  black = source_label_map == 0
+  target_label_map[black] = 0
+
+  # Ignore empty classes
+  unique_values = np.unique(source_label_map)
+  empty = np.isin(np.arange(scan_source.nclasses), unique_values,
+                  invert=True)
+
+  # Evaluate by label
+  eval = iouEval(scan_source.nclasses,
+                 np.arange(scan_source.nclasses)[empty])
+  eval.addBatch(target_label_map, source_label_map)
+  m_iou, iou = eval.getIoU()
+  print("IoU class: ", (iou * 100).astype(int))
+  m_acc = eval.getacc()
+  print("IoU: ", m_iou)
+  print("Acc: ", m_acc)
+
+  label_diff = abs(source_label - target_label)
+
+  # Range diff image
+  source_range = scan_source.proj_range
+  if scan_target.adaption == 'cp':
+    target_range = scan_target.merged.proj_range
+  else:
+    target_range = scan_target.proj_range
+  # Mask out no data (= black) in target scan
+  black = source_range == 0
+  # target_range[black] = 0
+
+  # Mask out too far data in target scan
+  # too_far = source_range >= 80
+  # source_range[too_far] = 0
+  # target_range[too_far] = 0
+
+  range_diff = (source_range - target_range) ** 2
+  # data = self.convert_range(range_diff)
+  MSE = range_diff.sum() / range_diff.size
+  print("MSE: ", MSE)
+  

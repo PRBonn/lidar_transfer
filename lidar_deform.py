@@ -2,9 +2,10 @@
 
 import argparse
 import os
+import time
 import yaml
 import numpy as np
-from auxiliary.laserscan import LaserScan, SemLaserScan, MultiSemLaserScan
+from auxiliary.laserscan import *
 from auxiliary.laserscanvis import LaserScanVis
 
 
@@ -320,12 +321,18 @@ if __name__ == '__main__':
   # create a visualizer
   if batch is False:
     show_diff = False
+    show_mesh = False
+    show_range = True
     if t_beams == beams:
       show_diff = True  # show diff only if comparison is possible
-    vis = LaserScanVis([W, t_W], [beams, t_beams], show_diff=show_diff)
+    if "mesh" in adaption:
+      show_mesh = True
+    vis = LaserScanVis([W, t_W], [beams, t_beams], show_diff=show_diff,
+                       show_range=show_range, show_mesh=show_mesh)
     vis.nframes = len(scan_names)
 
   # print instructions
+  if batch is False:
   print("To navigate:")
   print("\tb: back (previous scan)")
   print("\tn: next (next scan)")
@@ -333,16 +340,23 @@ if __name__ == '__main__':
 
   idx = FLAGS.offset
   while True:
+    t0_elapse = time.time()
     # open pointcloud
     scan.open_scan(scan_names[idx], fov_up, fov_down)
     scan.open_label(label_names[idx])
     scan.colorize()
+    scan.remove_classes(ignore_classes)
+    scan.do_range_projection(fov_up, fov_down, remove=True)
+    scan.do_label_projection()
 
     # open multiple scans
     scans.open_multiple_scans(scan_names, label_names, poses, idx)
 
     # run approach
     verts, verts_colors, faces = scans.deform(adaption, poses, idx)
+    compare(scan, scans)
+    s = time.time() - t0_elapse
+    print("Took: %.2fs" % (s))
 
     if batch is False:
       # pass to visualizer
@@ -351,12 +365,17 @@ if __name__ == '__main__':
       if adaption == 'cp':  # closest point
         vis.set_laserscans(scans)
         vis.set_diff(scan, scans)
+        vis.set_data(scan, scans)
       elif adaption == 'mesh':
         vis.set_points(scans.back_points, scans.label_color, t_W, t_beams)
         vis.set_diff(scan, scans)
+        vis.set_data(scan, scans, verts=verts, verts_colors=verts_colors / 255,
+                     faces=faces, W=t_W, H=t_beams)
       elif adaption == 'mergemesh':
         vis.set_points(scans.back_points, scans.label_color, t_W, t_beams)
         vis.set_diff(scan, scans)
+        vis.set_data(scan, scans, verts=verts, verts_colors=verts_colors / 255,
+                     faces=faces, W=t_W, H=t_beams)
       elif adaption == 'catmesh':
         # TODO Category Mesh
         quit()

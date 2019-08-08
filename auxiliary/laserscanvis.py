@@ -10,10 +10,10 @@ from auxiliary.np_ioueval import iouEval
 class LaserScanVis():
   """Class that creates and handles a visualizer for a pointcloud"""
 
-  def __init__(self, W, H, mesh=False, show_diff=False, show_range=False):
+  def __init__(self, W, H, show_mesh=False, show_diff=False, show_range=False):
     self.W = W
     self.H = H
-    self.mesh = mesh
+    self.show_mesh = show_mesh
     self.frame = 0
     self.nframes = 0
     self.show_diff = show_diff
@@ -112,6 +112,16 @@ class LaserScanVis():
     self.diff_view_label.add(self.diff_image_label)
     self.diff_view.add_widget(self.diff_view_label, 1, 0)
 
+    if self.show_mesh:
+      self.mesh_view = vispy.scene.widgets.ViewBox(
+          border_color='white', parent=self.scan_canvas.scene)
+      self.mesh_vis = visuals.Mesh(shading=None)
+      self.mesh_view.camera = 'turntable'
+      self.mesh_view.camera.link(self.scan_view.camera)
+      self.mesh_view.add(self.mesh_vis)
+      visuals.XYZAxis(parent=self.mesh_view.scene)
+      self.grid_view.add_widget(self.mesh_view, 0, 2)
+
   def get_mpl_colormap(self, cmap_name):
     cmap = plt.get_cmap(cmap_name)
 
@@ -122,17 +132,6 @@ class LaserScanVis():
     color_range = sm.to_rgba(np.linspace(0, 1, 256), bytes=True)[:, 2::-1]
 
     return color_range.reshape(256, 3).astype(np.float32) / 255.0
-
-  def show_mesh(self, show_mesh_):
-    self.mesh = show_mesh_
-    self.mesh_view = vispy.scene.widgets.ViewBox(
-      border_color='white', parent=self.scan_canvas.scene)
-    self.mesh_vis = visuals.Mesh(shading=None)
-    self.mesh_view.camera = 'turntable'
-    self.mesh_view.camera.link(self.scan_view.camera)
-    self.mesh_view.add(self.mesh_vis)
-    visuals.XYZAxis(parent=self.mesh_view.scene)
-    self.grid_view.add_widget(self.mesh_view, 0, 2)
 
   def set_laserscan(self, scan):
     # plot range
@@ -204,9 +203,10 @@ class LaserScanVis():
       self.test_vis.set_data(data)
     self.test_vis.update()
 
-  def set_data(self, scan_source, scan_target, verts=None, colors=None,
+  def set_data(self, scan_source, scan_target, verts=None, verts_colors=None,
                faces=None, W=None, H=None):
     if self.show_diff:
+      # TODO
       pass
     if self.show_range:
       source_data = scan_source.proj_range
@@ -223,7 +223,10 @@ class LaserScanVis():
       self.range_image_target.set_data(target_data)
       self.range_image_target.update()
     if self.show_mesh:
-      pass
+      self.mesh_vis.set_data(vertices=verts,
+                             vertex_colors=verts_colors,
+                             faces=faces)
+      self.mesh_vis.update()
 
   def set_diff(self, scan_source, scan_target):
     if not self.show_diff:
@@ -307,7 +310,7 @@ class LaserScanVis():
     return data
 
   def set_mesh(self, verts, verts_colors, faces):
-    if self.mesh:
+    if self.show_mesh:
       self.mesh_vis.set_data(vertices=verts,
                              vertex_colors=verts_colors,
                              faces=faces)
