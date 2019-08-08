@@ -214,7 +214,7 @@ class LaserScanVis():
       if scan_target.adaption == 'cp':
         target_range = scan_target.merged.proj_range
       else:
-        target_range = scan_target.range_image
+        target_range = scan_target.proj_range
       # target_data = self.convert_range(target_range)
       target_data = target_range
 
@@ -237,7 +237,7 @@ class LaserScanVis():
       target_label_map = scan_target.merged.get_label_map()
       target_label = scan_target.merged.proj_color[..., ::-1]
     else:
-      target_label = scan_target.ray_colors.reshape(self.H[0], -1, 3) / 255
+      target_label = scan_target.proj_color / 255
       target_label_map = scan_target.get_label_map()
 
     # Mask out no data (= black) in target scan
@@ -271,7 +271,7 @@ class LaserScanVis():
     if scan_target.adaption == 'cp':
       target_range = scan_target.merged.proj_range
     else:
-      target_range = scan_target.range_image
+      target_range = scan_target.proj_range
     # Mask out no data (= black) in target scan
     black = source_range == 0
     # target_range[black] = 0

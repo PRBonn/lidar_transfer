@@ -352,14 +352,10 @@ if __name__ == '__main__':
         vis.set_laserscans(scans)
         vis.set_diff(scan, scans)
       elif adaption == 'mesh':
-        vis.show_mesh(True)
-        vis.set_points(scans.ray_endpoints, scans.ray_colors, t_W, t_beams)
-        vis.set_mesh(verts, verts_colors / 255, faces)
+        vis.set_points(scans.back_points, scans.label_color, t_W, t_beams)
         vis.set_diff(scan, scans)
       elif adaption == 'mergemesh':
-        vis.show_mesh(True)
-        vis.set_points(scans.ray_endpoints, scans.ray_colors, t_W, t_beams)
-        vis.set_mesh(verts, verts_colors / 255, faces)
+        vis.set_points(scans.back_points, scans.label_color, t_W, t_beams)
         vis.set_diff(scan, scans)
       elif adaption == 'catmesh':
         # TODO Category Mesh

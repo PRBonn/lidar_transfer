@@ -635,6 +635,15 @@ class SemLaserScan(LaserScan):
       i += 1  # encode label as sequential number
     return label_map
 
+  def convert_color_to_label(self):
+    """ converts RGB label to original label index
+    """
+    label_map = np.ndarray(shape=self.proj_color.shape[:2], dtype=int)
+    label_map[:, :] = -1
+    for idx, rgb in self.color_dict.items():
+      label_map[((self.proj_color * 255).astype(np.uint8) == rgb).all(2)] = idx
+    return label_map
+
   def torch(self):
     super(SemLaserScan, self).torch()
     # pass label to pytorch in [1, m] shape (channel first)
@@ -802,10 +811,12 @@ class MultiSemLaserScan():
       rays = self.create_rays()
       origin = np.array([0, 0, 0]).astype(np.float32)
       t0_elapse = time.time()
-      self.ray_endpoints, self.ray_colors, \
-          verts, colors, faces, self.range_image = \
+      self.back_points, self.label_color, \
+          verts, colors, faces, self.proj_range = \
           tsdf_vol.throw_rays_at_mesh(rays, origin, self.H, self.W,
                                       self.scans[0].color_lut)
+      self.proj_color = self.label_color.reshape(self.H, self.W, 3)
+      self.label_image = self.convert_color_to_label()
       rps = len(rays) / (time.time() - t0_elapse)
       print("Average Rays per sec: %.2f" % (rps))
       return verts, colors, faces
@@ -851,10 +862,12 @@ class MultiSemLaserScan():
       rays = self.create_rays()
       origin = np.array([0, 0, 0]).astype(np.float32)
       t0_elapse = time.time()
-      self.ray_endpoints, self.ray_colors, \
-          verts, colors, faces, self.range_image = \
+      self.back_points, self.label_color, \
+          verts, colors, faces, self.proj_range = \
           tsdf_vol.throw_rays_at_mesh(rays, origin, self.H, self.W,
                                       self.scans[0].color_lut)
+      self.proj_color = self.label_color.reshape(self.H, self.W, 3)
+      self.label_image = self.convert_color_to_label()
       rps = len(rays) / (time.time() - t0_elapse)
       print("Average Rays per sec: %.2f" % (rps))
       return verts, colors, faces
@@ -871,7 +884,7 @@ class MultiSemLaserScan():
   def get_label_map(self):
     """ converts RGB label to single sequential label index
     """
-    proj_color = self.ray_colors.reshape(self.H, self.W, 3)
+    proj_color = self.label_color.reshape(self.H, self.W, 3)
     label_map = np.ndarray(shape=proj_color.shape[:2], dtype=int)
     label_map[:, :] = -1
     i = 0
@@ -880,7 +893,21 @@ class MultiSemLaserScan():
       i += 1  # encode label as sequential number
     return label_map
 
-  # TODO pass parameter for rays
+  def convert_color_to_label(self):
+    """ converts RGB label to original label index
+    """
+    label_map = np.ndarray(shape=self.proj_color.shape[:2], dtype=int)
+    label_map[:, :] = -1
+    for idx, rgb in self.color_dict.items():
+      # need to switch to BGR for comparison
+      t = rgb[2]
+      rgb[2] = rgb[0]
+      rgb[0] = t
+      label_map[((self.proj_color).astype(np.uint8) == rgb).all(2)] = idx
+    assert((label_map < 0).sum() == 0)
+    # TODO
+    return label_map
+
   def create_rays(self):
     beams = []
     fov_up = self.fov_up
@@ -912,12 +939,23 @@ class MultiSemLaserScan():
     return np.ascontiguousarray(beams.astype(np.float32))
 
   def write(self, out_dir, idx, range_image=False):
-    # Only write back_points which are valid (not black)
+    if self.adaption == 'cp':  # closest point
+      back_points = self.merged.back_points.reshape(-1, 3)
+      label_image = self.merged.label_image.reshape(-1)
+
+      # TODO necessary?
+      # Only write back_points which are valid (not black/unlabeled)
+      index = self.merged.index.reshape(-1,) > 0
+      back_points = back_points[index]
+      label_image = label_image[index].astype(np.int32)
+    else:
     back_points = self.back_points.reshape(-1, 3)
     label_image = self.label_image.reshape(-1)
-    index = self.index.reshape(-1,) > 0
+      index = label_image >= 0  # TODO there should be no -1
     back_points = back_points[index]
     label_image = label_image[index].astype(np.int32)
+
+    assert(back_points.shape[0] == label_image.shape[0])
 
     scan_file = open(
         os.path.join(out_dir, "velodyne", str(idx).zfill(6) + ".bin"), "wb")
