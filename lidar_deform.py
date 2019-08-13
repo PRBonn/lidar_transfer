@@ -142,8 +142,9 @@ if __name__ == '__main__':
 
   # does output folder and subfolder exists?
   if os.path.isdir(FLAGS.output):
-    out_scan_paths = os.path.join(FLAGS.output, "velodyne")
-    out_label_paths = os.path.join(FLAGS.output, "labels")
+    out_path = os.path.join(FLAGS.output, "sequences", FLAGS.sequence)
+    out_scan_paths = os.path.join(out_path, "velodyne")
+    out_label_paths = os.path.join(out_path, "labels")
     if os.path.isdir(out_scan_paths) and os.path.isdir(out_label_paths):
       print("Output folder with subfolder exists! %s" % FLAGS.output)
       if os.listdir(out_scan_paths):
@@ -151,8 +152,8 @@ if __name__ == '__main__':
       if os.listdir(out_label_paths):
         print("Output folder label is not empty! Data will be overwritten!")
     else:
-      os.mkdir(out_scan_paths)
-      os.mkdir(out_label_paths)
+      os.makedirs(out_scan_paths)
+      os.makedirs(out_label_paths)
       print("Created subfolder in output folder %s!" % FLAGS.output)
   else:
     print("Output folder doesn't exist! Exiting...")
@@ -354,6 +355,7 @@ if __name__ == '__main__':
 
     # run approach
     verts, verts_colors, faces = scans.deform(adaption, poses, idx)
+    if t_beams == beams:
     compare(scan, scans)
     s = time.time() - t0_elapse
     print("Took: %.2fs" % (s))
@@ -385,7 +387,8 @@ if __name__ == '__main__':
         quit()
 
     # Export backprojected point cloud (+ range image)
-    # scans.write(FLAGS.output, idx)
+    # TODO write config to export path
+    scans.write(out_path, idx)
 
     if batch:
       idx = (idx + 1) % (len(scan_names) - (nscans - 1))
