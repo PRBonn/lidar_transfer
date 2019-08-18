@@ -15,10 +15,10 @@ def change_config(filename, key, value):
     yaml.dump(config, f)
 
 
-def plot(fn, data, title, pre, fname, xdata, ydata):
+def plot(fn, data, title, pre, fname, xdata, ydata, cmap):
   plt.figure(fn, figsize=(8, 6))
   plt.subplots_adjust(left=.2, right=0.95, bottom=0.15, top=0.95)
-  plt.imshow(data, interpolation='nearest', cmap=plt.cm.summer)
+  plt.imshow(data, interpolation='nearest', cmap=cmap)
   plt.xlabel('voxel size')
   plt.ylabel('frames')
   plt.colorbar()
@@ -33,16 +33,16 @@ if __name__ == '__main__':
   p = "/automount_home_students/flanger"
   cfg_file = p + "/workspace/msc/lidar_transfer/experiments/" + \
       "grid_search_nframes_voxelsize.yaml"
-  dataset = p + "/kitti/dataset/"
+  dataset = "/media/flanger/SAMS1TB_0/kitti-odometry/dataset/"
   sequence = "00"
-  offset = 10
+  offset = 70
   adaption = "mergemesh"
   frames = [1, 2, 3, 4, 5, 10, 20]
   voxel_size = [.5, 0.25, .1, .075, .05]
 
   # test settings
   # adaption = "cp"
-  # voxel_size = [0]
+  # voxel_size = [.5]
   # frames = [1, 2]
 
   IoU = np.zeros((len(frames), len(voxel_size)))
@@ -64,22 +64,26 @@ if __name__ == '__main__':
                                      "-d", dataset,
                                      "-s", sequence,
                                      "-o", str(offset),
+                                     "--one_scan",
                                      "-b"])
       out_decoded = out.decode().strip()
       # print(out_decoded)
-      IoU[f, v] = float(out.splitlines()[-4].decode().strip()[4:])
-      Acc[f, v] = float(out.splitlines()[-3].decode().strip()[4:])
-      MSE[f, v] = float(out.splitlines()[-2].decode().strip()[4:])
+      IoU[f, v] = float(out.splitlines()[-4 - 3].decode().strip()[4:])
+      Acc[f, v] = float(out.splitlines()[-3 - 3].decode().strip()[4:])
+      MSE[f, v] = float(out.splitlines()[-2 - 3].decode().strip()[4:])
       print("-> IoU %f, Acc %f, MSE %f" % (IoU[f, v], Acc[f, v], MSE[f, v]))
-      print("->", out.splitlines()[-1].decode().strip())
+      print("->", out.splitlines()[-1 - 3].decode().strip())
 
   # IoU plot
-  plot(1, IoU, "Grid Search IoU Score", "Score_IoU", fname, voxel_size, frames)
+  plot(1, IoU, "Grid Search IoU Score", "Score_IoU", fname, voxel_size, frames,
+       plt.cm.summer)
 
   # Acc plot
-  plot(2, Acc, "Grid Search Acc Score", "Score_Acc", fname, voxel_size, frames)
+  plot(2, Acc, "Grid Search Acc Score", "Score_Acc", fname, voxel_size, frames,
+       plt.cm.summer)
 
   # MSE plot
-  plot(3, MSE, "Grid Search MSE Score", "Score_MSE", fname, voxel_size, frames)
+  plot(3, MSE, "Grid Search MSE Score", "Score_MSE", fname, voxel_size, frames,
+       plt.cm.summer_r)
 
   plt.show()
