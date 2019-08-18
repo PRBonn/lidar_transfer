@@ -118,6 +118,18 @@ if __name__ == '__main__':
       required=False,
       help='Run in batch mode.',
   )
+  parser.add_argument(
+      '--write', '-w',
+      action='store_true',
+      required=False,
+      help='Write new dataset to file.',
+  )
+  parser.add_argument(
+      '--one_scan',
+      action='store_true',
+      required=False,
+      help='Run only once.',
+  )
   FLAGS, unparsed = parser.parse_known_args()
 
   # print summary of what we will do
@@ -141,6 +153,7 @@ if __name__ == '__main__':
     quit()
 
   # does output folder and subfolder exists?
+  if FLAGS.write:
   if os.path.isdir(FLAGS.output):
     out_path = os.path.join(FLAGS.output, "sequences", FLAGS.sequence)
     out_scan_paths = os.path.join(out_path, "velodyne")
@@ -308,6 +321,11 @@ if __name__ == '__main__':
   except Exception as e:
     print("No voxel boundaries set")
 
+  try:
+    increment = CFG["batch_interval"]
+  except Exception as e:
+    increment = 1
+
   # create a scan
   color_dict = CFG["color_map"]
   nclasses = len(color_dict)
@@ -388,13 +406,13 @@ if __name__ == '__main__':
 
     # Export backprojected point cloud (+ range image)
     # TODO write config to export path
+    if FLAGS.write:
     scans.write(out_path, idx)
 
     if batch:
-      idx = (idx + 1) % (len(scan_names) - (nscans - 1))
-      if idx == 0:
+      if idx >= (len(scan_names) - (nscans - 1)):
         quit()
-      print("#" * 10, idx, "/", len(scan_names), "#" * 10)
+      print("#" * 30, FLAGS.sequence, "-", idx, "/", len(scan_names), "#" * 30)
     else:
       # get user choice
       while True:
