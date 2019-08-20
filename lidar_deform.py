@@ -286,6 +286,7 @@ if __name__ == '__main__':
     t_beam_angles = target_config['beam_angles']
     t_beam_angles.sort()
   except Exception as e:
+    t_beam_angles = None
     print("No beam angles in target config: calculate equidistant angles")
 
   # Approach parameter
@@ -373,8 +374,10 @@ if __name__ == '__main__':
 
     # run approach
     verts, verts_colors, faces = scans.deform(adaption, poses, idx)
-    if t_beams == beams:
-    compare(scan, scans)
+    if t_beams == beams and t_W == W:
+      label_diff, range_diff, m_iou, m_acc, MSE = compare(scan, scans)
+      if batch is False:
+        vis.set_diff2(label_diff, range_diff, m_iou, m_acc, MSE)
     s = time.time() - t0_elapse
     print("Took: %.2fs" % (s))
 
@@ -384,17 +387,14 @@ if __name__ == '__main__':
       vis.set_laserscan(scan)
       if adaption == 'cp':  # closest point
         vis.set_laserscans(scans)
-        vis.set_diff(scan, scans)
         vis.set_data(scan, scans)
       elif adaption == 'mesh':
         vis.set_points(scans.back_points, scans.label_color, t_W, t_beams)
-        vis.set_diff(scan, scans)
-        vis.set_data(scan, scans, verts=verts, verts_colors=verts_colors / 255,
+        vis.set_data(scan, scans, verts=verts, verts_colors=verts_colors,
                      faces=faces, W=t_W, H=t_beams)
       elif adaption == 'mergemesh':
         vis.set_points(scans.back_points, scans.label_color, t_W, t_beams)
-        vis.set_diff(scan, scans)
-        vis.set_data(scan, scans, verts=verts, verts_colors=verts_colors / 255,
+        vis.set_data(scan, scans, verts=verts, verts_colors=verts_colors,
                      faces=faces, W=t_W, H=t_beams)
       elif adaption == 'catmesh':
         # TODO Category Mesh
@@ -409,7 +409,12 @@ if __name__ == '__main__':
     if FLAGS.write:
     scans.write(out_path, idx)
 
+
+    if FLAGS.one_scan:
+      quit()
+
     if batch:
+      idx = idx + increment
       if idx >= (len(scan_names) - (nscans - 1)):
         quit()
       print("#" * 30, FLAGS.sequence, "-", idx, "/", len(scan_names), "#" * 30)

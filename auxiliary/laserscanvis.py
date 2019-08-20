@@ -168,7 +168,6 @@ class LaserScanVis():
     self.img_vis.update()
 
   def set_laserscans(self, scan):
-    self.scan_canvas.title = 'Frame %d of %d' % (self.frame + 1, self.nframes)
     # plot 3D
     if hasattr(scan.merged, 'label_color'):
       label_color = scan.merged.label_color_image.reshape(-1, 3)
@@ -205,6 +204,7 @@ class LaserScanVis():
 
   def set_data(self, scan_source, scan_target, verts=None, verts_colors=None,
                faces=None, W=None, H=None):
+    self.scan_canvas.title = 'Frame %d of %d' % (self.frame + 1, self.nframes)
     if self.show_diff:
       # TODO
       pass
@@ -224,23 +224,35 @@ class LaserScanVis():
       self.range_image_target.update()
     if self.show_mesh:
       self.mesh_vis.set_data(vertices=verts,
-                             vertex_colors=verts_colors,
+                             vertex_colors=verts_colors[..., ::-1],
                              faces=faces)
       self.mesh_vis.update()
+
+  def set_diff2(self, label_diff, range_diff, m_iou, m_acc, MSE):
+    self.diff_image_label.set_data(label_diff[..., ::-1])
+    self.diff_image_label.update()
+
+    data = self.convert_range(range_diff)
+    self.diff_image_depth.set_data(data)
+    self.diff_image_depth.set_data(range_diff)
+    self.diff_image_depth.update()
+
+    self.diff_canvas.title = \
+        'IoU %5.2f%%, Acc %5.2f%%, MSE %f' % (m_iou * 100.0, m_acc * 100, MSE)
 
   def set_diff(self, scan_source, scan_target):
     if not self.show_diff:
       return
 
     # Label intersection image
-    source_label = scan_source.proj_color[..., ::-1]
+    source_label = scan_source.proj_color
     source_label_map = scan_source.get_label_map()
 
     if scan_target.adaption == 'cp':
       target_label_map = scan_target.merged.get_label_map()
-      target_label = scan_target.merged.proj_color[..., ::-1]
+      target_label = scan_target.merged.proj_color
     else:
-      target_label = scan_target.proj_color / 255
+      target_label = scan_target.proj_color
       target_label_map = scan_target.get_label_map()
 
     # Mask out no data (= black) in target scan
@@ -256,17 +268,17 @@ class LaserScanVis():
                     invert=True)
     
     # Evaluate by label
-    eval = iouEval(scan_source.nclasses,
-                   np.arange(scan_source.nclasses)[empty])
-    eval.addBatch(target_label_map, source_label_map)
-    m_iou, iou = eval.getIoU()
-    print("IoU class: ", (iou * 100).astype(int))
-    m_acc = eval.getacc()
-    print("IoU: ", m_iou)
-    print("Acc: ", m_acc)
+    # eval = iouEval(scan_source.nclasses,
+    #                np.arange(scan_source.nclasses)[empty])
+    # eval.addBatch(target_label_map, source_label_map)
+    # m_iou, iou = eval.getIoU()
+    # print("IoU class: ", (iou * 100).astype(int))
+    # m_acc = eval.getacc()
+    # print("IoU: ", m_iou)
+    # print("Acc: ", m_acc)
 
     label_diff = abs(source_label - target_label)
-    self.diff_image_label.set_data(label_diff)
+    self.diff_image_label.set_data(label_diff[..., ::-1])
     self.diff_image_label.update()
 
     # Range diff image
@@ -293,11 +305,14 @@ class LaserScanVis():
     self.diff_image_depth.set_data(range_diff)
     self.diff_image_depth.update()
 
-    MSE = range_diff.sum() / range_diff.size
-    print("MSE: ", MSE)
+    # temp = np.copy(range_diff)
+    # print((range_diff==1).sum())
+    # temp[range_diff==1] = 0.0
+    # MSE = range_diff.sum() / range_diff.size
+    # print("MSE: ", MSE)
 
-    self.diff_canvas.title = \
-        'IoU %5.2f%%, Acc %5.2f%%, MSE %f' % (m_iou * 100.0, m_acc * 100, MSE)
+    # self.diff_canvas.title = \
+    #     'IoU %5.2f%%, Acc %5.2f%%, MSE %f' % (m_iou * 100.0, m_acc * 100, MSE)
 
   def convert_range(self, range_image, power=16):
     data = np.copy(range_image)
@@ -318,15 +333,14 @@ class LaserScanVis():
 
   def set_points(self, points, colors, W, H):
     # plot range
-    colors = colors / 255
     self.back_vis.set_data(points,
-                            face_color=colors,
-                            edge_color=colors,
+                           face_color=colors[..., ::-1],
+                           edge_color=colors[..., ::-1],
                             size=3)
     self.back_vis.update()
 
     # plot range image test
-    self.test_vis.set_data(colors.reshape(H, W, 3))
+    self.test_vis.set_data(colors.reshape(32, W, 3)[..., ::-1])
     self.test_vis.update()
 
   # interface

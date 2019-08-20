@@ -525,7 +525,7 @@ class SemLaserScan(LaserScan):
 
     # only fill in attribute if the right size
     if label.shape[0] == self.points.shape[0]:
-      self.label = label
+      self.label = label & 0xFFFF  # semantic label in lower half
     else:
       raise ValueError("Scan and Label don't contain same number of points")
 
@@ -799,7 +799,9 @@ class MultiSemLaserScan():
       for i, scan in enumerate(self.scans):
         print("Fusing scan %d/%d" % (i + 1, self.nscans))
         # Pose transformation already applied
-        tsdf_vol.integrate(scan.proj_color * 255, scan.proj_range, np.eye(3),
+        proj_label3 = np.zeros(scan.proj_color.shape)
+        proj_label3[:, :, 0] = scan.proj_label
+        tsdf_vol.integrate(proj_label3, scan.proj_range, np.eye(3),
                            obs_weight=1.)
       fps = self.nscans / (time.time() - t0_elapse)
       print("Average FPS: %.2f" % (fps))
@@ -807,12 +809,17 @@ class MultiSemLaserScan():
       rays = self.create_rays()
       origin = np.array([0, 0, 0]).astype(np.float32)
       t0_elapse = time.time()
-      self.back_points, self.label_color, \
+      self.back_points, label_color, \
           verts, colors, faces, self.proj_range = \
           tsdf_vol.throw_rays_at_mesh(rays, origin, self.H, self.W,
                                       self.scans[0].color_lut)
-      self.proj_color = self.label_color.reshape(self.H, self.W, 3)
-      self.label_image = self.convert_color_to_label()
+
+      self.proj_color = label_color.reshape(self.H, self.W, 3)
+      self.label_color = self.scans[0].color_lut[label_color[:, 2]]
+      self.label = np.copy(self.proj_color[:, :, 2])
+      self.proj_color = self.scans[0].color_lut[self.label]
+      colors = self.scans[0].color_lut[colors[:, 2]]
+
       rps = len(rays) / (time.time() - t0_elapse)
       print("Average Rays per sec: %.2f" % (rps))
       return verts, colors, faces
@@ -840,17 +847,25 @@ class MultiSemLaserScan():
                                           remove=True)
       self.merged.do_label_projection_new()
 
-      vol_bnds = self.vol_bnds
+
+      # vol_bnds = self.vol_bnds
+      vol_bnds = np.array([[-50, 50], [-50, 50], [-3, 2]])  # TODO max bnds
       # Automatically set voxel bounds by examining the complete point cloud
-      if vol_bnds.all() is None:
-        vol_bnds = self.merged.get_bnds()
+      # if vol_bnds.all() is None:
+        # vol_bnds = self.merged.get_bnds()
+      # else:
+      merged_bnds = np.rint(self.merged.get_bnds()).astype(int)
+      vol_bnds[:, 0] = np.maximum(vol_bnds[:, 0], merged_bnds[:, 0])
+      vol_bnds[:, 1] = np.minimum(vol_bnds[:, 1], merged_bnds[:, 1])
 
       print("Initializing voxel volume...")
       tsdf_vol = fl.TSDFVolume(vol_bnds, voxel_size=self.voxel_size,
                                fov_up=self.fov_up, fov_down=self.fov_down)
 
       t0_elapse = time.time()
-      tsdf_vol.integrate(self.merged.proj_color * 255, self.merged.proj_range,
+      proj_label3 = np.zeros(self.merged.proj_color.shape)
+      proj_label3[:, :, 0] = self.merged.proj_label
+      tsdf_vol.integrate(proj_label3, self.merged.proj_range,
                          np.eye(3), obs_weight=1.)
       fps = 1.0 / (time.time() - t0_elapse)
       print("Average FPS: %.2f" % (fps))
@@ -858,14 +873,23 @@ class MultiSemLaserScan():
       rays = self.create_rays()
       origin = np.array([0, 0, 0]).astype(np.float32)
       t0_elapse = time.time()
-      self.back_points, self.label_color, \
+      self.back_points, label_color, \
           verts, colors, faces, self.proj_range = \
           tsdf_vol.throw_rays_at_mesh(rays, origin, self.H, self.W,
                                       self.scans[0].color_lut)
-      self.proj_color = self.label_color.reshape(self.H, self.W, 3)
-      self.label_image = self.convert_color_to_label()
+      # proj_color    H x W x 3   [0,1]   -> colors for projected label image
+      # label_color   back x 3    [0,1]   -> same as above, but same dim as points
+      # label         H x W x 1   [0,259] -> label index for export
+      #     label_image   H x W x 1   [0,259] -> same as above but image dims
+      # colors        verts x 3   [0,1]   -> colors for mesh visualisation
+
+      self.proj_color = label_color.reshape(t_H, t_W, 3)
+      self.label_color = self.merged.color_lut[label_color[:, 2]]
+      self.label_image = np.copy(self.proj_color[:, :, 2])
+      self.proj_color = self.merged.color_lut[self.label_image]  # [0,1]
+      colors = self.merged.color_lut[colors[:, 2]]
       rps = len(rays) / (time.time() - t0_elapse)
-      print("Average Rays per sec: %.2f" % (rps))
+      # print("Average Rays per sec: %.2f" % (rps))
       return verts, colors, faces
 
     elif adaption == 'catmesh':
@@ -954,12 +978,14 @@ class MultiSemLaserScan():
       index = label_image >= 0  # TODO there should be no -1
     back_points = back_points[index]
     label_image = label_image[index].astype(np.int32)
+      keep = np.sum(back_points, axis=1) != 0  # remove points with (0, 0, 0)
+      back_points = back_points[keep]
+      label_image = label_image[keep]
 
     assert(back_points.shape[0] == label_image.shape[0])
 
     scan_file = open(
         os.path.join(out_dir, "velodyne", str(idx).zfill(6) + ".bin"), "wb")
-    # print(self.points[0,0], self.points[1,0], self.points[2,0])
     for point in back_points:
         # print(point[0], point[1], point[2])
         # Set remissions to zero!
@@ -985,39 +1011,56 @@ class MultiSemLaserScan():
 
 def compare(scan_source, scan_target):
   # Label intersection image
-  source_label = scan_source.proj_color[..., ::-1]
-  source_label_map = scan_source.get_label_map()
+  source_color = scan_source.proj_color
+  # source_label_map = scan_source.get_label_map()
+  source_label = scan_source.proj_label
 
   if scan_target.adaption == 'cp':
-    target_label_map = scan_target.merged.get_label_map()
-    target_label = scan_target.merged.proj_color[..., ::-1]
+    target_label = scan_target.merged.proj_label
+    target_color = scan_target.merged.proj_color
   else:
-    target_label = scan_target.proj_color / 255
-    target_label_map = scan_target.get_label_map()
+    target_color = scan_target.proj_color
+    target_label = np.copy(scan_target.label_image)
 
+  assert(source_color.size == target_color.size)
+  assert(source_label.size == target_label.size)
   # Mask out no data (= black) in target scan
-  black = np.sum(source_label, axis=2) == 0
-  black = np.repeat(black[:, :, np.newaxis], 3, axis=2)
-  target_label[black] = 0
-  black = source_label_map == 0
-  target_label_map[black] = 0
+  black_values = np.sum(source_color, axis=2) == 0
+  source_label[black_values] = 0
+  target_label[black_values] = 0
+  black_values_3 = np.repeat(black_values[:, :, np.newaxis], 3, axis=2)
+  target_color[black_values_3] = 0
+
+  bg_label = source_label == 0
+  bg_label_3 = np.repeat(bg_label[:, :, np.newaxis], 3, axis=2)
+  target_label[bg_label] = 0
+  target_color[bg_label_3] = 0
+
+  label_diff = abs(source_color - target_color)
 
   # Ignore empty classes
-  unique_values = np.unique(source_label_map)
-  empty = np.isin(np.arange(scan_source.nclasses), unique_values,
-                  invert=True)
+  unique_values = np.union1d(np.unique(source_label), np.unique(target_label))
+
+  # TODO wrong empty classes change np.arange to real index and so on
+  # empty = np.isin(np.arange(scan_source.nclasses), unique_values,
+  #                 invert=True)
+  # empty = np.zeros((scan_source.nclasses, ), dtype=bool)
+  for i, value in enumerate(unique_values):
+    mask_source = source_label == value
+    mask_target = target_label == value
+    source_label[mask_source] = i
+    target_label[mask_target] = i
+  #   if mask_source.sum() > 0 & mask_target.sum() > 0:
+  #     empty[i] = True
 
   # Evaluate by label
-  eval = iouEval(scan_source.nclasses,
-                 np.arange(scan_source.nclasses)[empty])
-  eval.addBatch(target_label_map, source_label_map)
+  eval = iouEval(scan_source.nclasses, [])
+  eval.addBatch(target_label, source_label)
   m_iou, iou = eval.getIoU()
   print("IoU class: ", (iou * 100).astype(int))
   m_acc = eval.getacc()
   print("IoU: ", m_iou)
   print("Acc: ", m_acc)
-
-  label_diff = abs(source_label - target_label)
 
   # Range diff image
   source_range = scan_source.proj_range
@@ -1039,3 +1082,4 @@ def compare(scan_source, scan_target):
   MSE = range_diff.sum() / range_diff.size
   print("MSE: ", MSE)
   
+  return label_diff, range_diff, m_iou, m_acc, MSE

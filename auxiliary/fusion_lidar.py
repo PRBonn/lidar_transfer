@@ -184,6 +184,9 @@ class TSDFVolume(object):
       self._n_gpu_loops = int(np.ceil(float(np.prod(self._vol_dim))/float(np.prod(self._max_gpu_grid_dim)*self._max_gpu_threads_per_block)))
 
   def integrate(self,color_im,depth_im,cam_pose,obs_weight=1.):
+    """ Data should be in world frame with pose transformation applied
+        Not using the cam_pose input!
+    """
     im_h = depth_im.shape[0]
     im_w = depth_im.shape[1]
 
