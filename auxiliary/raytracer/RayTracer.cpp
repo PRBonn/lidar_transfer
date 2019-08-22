@@ -20,6 +20,7 @@ void trace(float* rays, float* origin_in, float* verts, int* faces, int* colors,
            int n_rays, int n_verts, int n_faces, int height,
            float* endpoints, int* endcolors, float* range) {
   vector<Object*> objects;
+
   // for(int i=0; i<10; ++i) {
   //   printf("r %f %f %f\n", rays[i*3+0], rays[i*3+1], rays[i*3+2]);
   //   printf("v %f %f %f\n", verts[i*3+0], verts[i*3+1], verts[i*3+2]);
@@ -45,9 +46,7 @@ void trace(float* rays, float* origin_in, float* verts, int* faces, int* colors,
   // Compute a BVH for this object set
   BVH bvh(&objects);
 
-  // Allocate space for some image pixels
   const unsigned int width=n_rays/height ;
-  // float* pixels = new float[width*height*3];
 
   Vector3 origin(origin_in[0], origin_in[1], origin_in[2]);
 
@@ -64,23 +63,15 @@ void trace(float* rays, float* origin_in, float* verts, int* faces, int* colors,
       IntersectionInfo I;
       bool hit = bvh.getIntersection(ray, &I, false);
 
-      if(!hit) {
-        // pixels[index] = pixels[index+1] = pixels[index+2] = 0.f;
-      } else {
-        // const Vector3 color(fabs(c0.x), fabs(c0.y), fabs(c0.z));
-        // const Vector3 normal = I.object->getNormal(I);
+      if(hit) {
         Vector3 colors = I.object->getColor(0);
         Vector3 point = I.hit;
-        // const Vector3 color(fabs(normal.x), fabs(normal.y), fabs(normal.z));
         endpoints[index+0] = point[0];
         endpoints[index+1] = point[1];
         endpoints[index+2] = point[2];
 
-        // pixels[index+0] = colors.x;
         endcolors[index+0] = colors.x;
-        // pixels[index+1] = colors.y;
         endcolors[index+1] = colors.y;
-        // pixels[index+2] = colors.z;
         endcolors[index+2] = colors.z;
 
         // Update range image
