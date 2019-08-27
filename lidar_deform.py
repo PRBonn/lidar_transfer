@@ -154,6 +154,7 @@ if __name__ == '__main__':
 
   # does output folder and subfolder exists?
   if FLAGS.write:
+    print("Output folder is %s" % FLAGS.output)
   if os.path.isdir(FLAGS.output):
     out_path = os.path.join(FLAGS.output, "sequences", FLAGS.sequence)
     out_scan_paths = os.path.join(out_path, "velodyne")
@@ -168,7 +169,20 @@ if __name__ == '__main__':
       os.makedirs(out_scan_paths)
       os.makedirs(out_label_paths)
       print("Created subfolder in output folder %s!" % FLAGS.output)
+
+      png_scan_paths = os.path.join(out_path, "velodyne_png")
+      png_label_paths = os.path.join(out_path, "labels_png")
+      if os.path.isdir(png_scan_paths) and os.path.isdir(png_label_paths):
+        print("Output folder with subfolder exists! %s" % FLAGS.output)
+        if os.listdir(png_scan_paths):
+          print("Output folder velodyne is not empty! Data will be overwritten!")
+        if os.listdir(png_label_paths):
+          print("Output folder label is not empty! Data will be overwritten!")
   else:
+        os.makedirs(png_scan_paths)
+        os.makedirs(png_label_paths)
+        print("Created subfolder in output folder %s!" % FLAGS.output)
+    else:
     print("Output folder doesn't exist! Exiting...")
     quit()
 
@@ -205,8 +219,7 @@ if __name__ == '__main__':
 
   # read config.yaml of dataset
   try:
-    scan_config_path = os.path.join(FLAGS.dataset, "sequences",
-                                    FLAGS.sequence, "config.yaml")
+    scan_config_path = os.path.join(FLAGS.dataset, "config.yaml")
     print("Opening config file", scan_config_path)
     scan_config = yaml.safe_load(open(scan_config_path, 'r'))
   except Exception as e:
