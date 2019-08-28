@@ -663,7 +663,8 @@ class MultiSemLaserScan():
 
   def __init__(self, H, W, nscans, nclasses, ignore_classes, moving_classes,
                fov_up, fov_down, color_dict=None, transformation=None,
-               beam_angles=None, voxel_size=0.1, vol_bnds=None):
+               beam_angles=None, preserve_float=False,
+               voxel_size=0.1, vol_bnds=None):
     self.H = H
     self.W = W
     self.nscans = nscans
@@ -675,6 +676,7 @@ class MultiSemLaserScan():
     self.color_dict = color_dict
     self.transformation = transformation
     self.beam_angles = beam_angles
+    self.preserve_float = preserve_float
     self.voxel_size = voxel_size
     self.poses = np.zeros((nscans, 4, 4), dtype=np.float32)
     self.vol_bnds = vol_bnds
@@ -764,7 +766,8 @@ class MultiSemLaserScan():
       self.merged.do_range_projection_new(self.fov_up, self.fov_down,
                                           remove=True)
       self.merged.do_label_projection_new()
-      self.merged.do_reverse_projection_new(self.fov_up, self.fov_down)
+      self.merged.do_reverse_projection_new(self.fov_up, self.fov_down,
+                                            preserve_float=self.preserve_float)
       self.merged
         return [], [], []
 

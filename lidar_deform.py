@@ -306,6 +306,7 @@ if __name__ == '__main__':
 
   # Approach parameter
   adaption = CFG["adaption"]  # ['mesh', 'catmesh', 'cp']
+  preserve_float = CFG["preserve_float"]
   voxel_size = CFG["voxel_size"]
   voxel_bounds = np.array(CFG["voxel_bounds"])
   nscans = CFG["number_of_scans"]
@@ -326,6 +327,7 @@ if __name__ == '__main__':
   print("Aggregate", nscans, "scans")
   print("Transformation", transformation)
   print("Adaption", adaption)
+  print("Preserve Float", preserve_float)
   print("Voxel size", voxel_size)
   print("Voxel bounds", voxel_bounds)
   print("Ignore classes", ignore_classes)
@@ -382,6 +384,7 @@ if __name__ == '__main__':
                               t_fov_up, t_fov_down, color_dict,
                               # target_settings
                               transformation=transformation,
+                              preserve_float=preserve_float,
                               voxel_size=voxel_size, vol_bnds=voxel_bounds)
     # open pointcloud
     scan.open_scan(scan_names[idx], fov_up, fov_down)
