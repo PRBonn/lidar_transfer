@@ -5,6 +5,7 @@ from vispy.scene import visuals, SceneCanvas
 import numpy as np
 from matplotlib import pyplot as plt
 from auxiliary.np_ioueval import iouEval
+from auxiliary.tools import get_mpl_colormap, convert_range
 
 
 class LaserScanVis():
@@ -122,17 +123,6 @@ class LaserScanVis():
       visuals.XYZAxis(parent=self.mesh_view.scene)
       self.grid_view.add_widget(self.mesh_view, 0, 2)
 
-  def get_mpl_colormap(self, cmap_name):
-    cmap = plt.get_cmap(cmap_name)
-
-    # Initialize the matplotlib color map
-    sm = plt.cm.ScalarMappable(cmap=cmap)
-
-    # Obtain linear color range
-    color_range = sm.to_rgba(np.linspace(0, 1, 256), bytes=True)[:, 2::-1]
-
-    return color_range.reshape(256, 3).astype(np.float32) / 255.0
-
   def set_laserscan(self, scan):
     # plot range
     if hasattr(scan, 'label_color'):
@@ -140,30 +130,28 @@ class LaserScanVis():
       self.scan_vis.set_data(scan.points,
                              face_color=scan.label_color[..., ::-1],
                              edge_color=scan.label_color[..., ::-1],
-                             size=3)
+                             size=1)
     else:
       power = 16
-      # print()
       range_data = np.copy(scan.unproj_range)
-      # print(range_data.max(), range_data.min())
       range_data = range_data**(1 / power)
       # print(range_data.max(), range_data.min())
       viridis_range = ((range_data - range_data.min()) /
                        (range_data.max() - range_data.min()) *
                        255).astype(np.uint8)
-      viridis_map = self.get_mpl_colormap("viridis")
+      viridis_map = get_mpl_colormap("viridis")
       viridis_colors = viridis_map[viridis_range]
       self.scan_vis.set_data(scan.points,
                              face_color=viridis_colors[..., ::-1],
                              edge_color=viridis_colors[..., ::-1],
-                             size=3)
+                             size=1)
     self.scan_vis.update()
 
     # plot range image
     if hasattr(scan, 'proj_color'):
       self.img_vis.set_data(scan.proj_color[..., ::-1])
     else:
-      data = self.convert_range(scan.proj_range)
+      data = convert_range(scan.proj_range)
       self.img_vis.set_data(data)
     self.img_vis.update()
 
@@ -175,7 +163,7 @@ class LaserScanVis():
       self.back_vis.set_data(points,
                              face_color=label_color[..., ::-1],
                              edge_color=label_color[..., ::-1],
-                             size=3)
+                             size=1)
     else:
       power = 16
       range_data = np.copy(scan.get_scan(0).unproj_range)
@@ -185,12 +173,12 @@ class LaserScanVis():
       viridis_range = ((range_data - range_data.min()) /
                        (range_data.max() - range_data.min()) *
                        255).astype(np.uint8)
-      viridis_map = self.get_mpl_colormap("viridis")
+      viridis_map = get_mpl_colormap("viridis")
       viridis_colors = viridis_map[viridis_range]
       self.back_vis.set_data(scan.get_scan(0).points,
                              face_color=viridis_colors[..., ::-1],
                              edge_color=viridis_colors[..., ::-1],
-                             size=3)
+                             size=1)
     self.back_vis.update()
 
     # plot label image test
@@ -198,13 +186,16 @@ class LaserScanVis():
       self.test_vis.set_data(scan.merged.proj_color[..., ::-1])
     else:
       # print()
-      data = self.convert_range(scan.get_scan(0).proj_range)
+      data = convert_range(scan.get_scan(0).proj_range)
       self.test_vis.set_data(data)
     self.test_vis.update()
 
+  def set_title(self):
+    self.scan_canvas.title = 'Frame %d of %d' % (self.frame + 1, self.nframes)
+
   def set_data(self, scan_source, scan_target, verts=None, verts_colors=None,
                faces=None, W=None, H=None):
-    self.scan_canvas.title = 'Frame %d of %d' % (self.frame + 1, self.nframes)
+    self.set_title()
     if self.show_diff:
       # TODO
       pass
@@ -232,7 +223,7 @@ class LaserScanVis():
     self.diff_image_label.set_data(label_diff[..., ::-1])
     self.diff_image_label.update()
 
-    data = self.convert_range(range_diff)
+    data = convert_range(range_diff)
     self.diff_image_depth.set_data(data)
     self.diff_image_depth.set_data(range_diff)
     self.diff_image_depth.update()
@@ -300,7 +291,7 @@ class LaserScanVis():
 
     range_diff = (source_range - target_range) ** 2
 
-    data = self.convert_range(range_diff)
+    data = convert_range(range_diff)
     self.diff_image_depth.set_data(data)
     self.diff_image_depth.set_data(range_diff)
     self.diff_image_depth.update()
@@ -313,16 +304,6 @@ class LaserScanVis():
 
     # self.diff_canvas.title = \
     #     'IoU %5.2f%%, Acc %5.2f%%, MSE %f' % (m_iou * 100.0, m_acc * 100, MSE)
-
-  def convert_range(self, range_image, power=16):
-    data = np.copy(range_image)
-    # print(data[data > 0].max(), data[data > 0].min())
-    data[data > 0] = data[data > 0]**(1 / power)
-    data[data < 0] = data[data > 0].min()
-    # print(data.max(), data.min())
-    data = (data - data[data > 0].min()) / \
-        (data.max() - data[data > 0].min())
-    return data
 
   def set_mesh(self, verts, verts_colors, faces):
     if self.show_mesh:
@@ -340,7 +321,7 @@ class LaserScanVis():
     self.back_vis.update()
 
     # plot range image test
-    self.test_vis.set_data(colors.reshape(32, W, 3)[..., ::-1])
+    self.test_vis.set_data(colors.reshape(H, W, 3)[..., ::-1])
     self.test_vis.update()
 
   # interface

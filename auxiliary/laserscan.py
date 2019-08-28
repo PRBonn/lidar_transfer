@@ -6,6 +6,7 @@ import time
 import torch
 import auxiliary.fusion_lidar as fl
 from auxiliary.np_ioueval import iouEval
+from auxiliary.tools import get_mpl_colormap, convert_range
 
 
 class LaserScan:
@@ -711,7 +712,7 @@ class MultiSemLaserScan():
       for i, scan in enumerate(self.scans):
         scan_idx = idx + relative_idx[i]
         print("Open scan %d/%d %d:%d" % (i + 1, self.nscans, relative_idx[i],
-                                         scan_idx))
+                                         scan_idx + 1))
         self.poses[i] = scan.pose = poses[scan_idx]
         scan.open_scan(scan_names[scan_idx], self.fov_up, self.fov_down)
         scan.open_label(label_names[scan_idx])
@@ -913,25 +914,8 @@ class MultiSemLaserScan():
       i += 1  # encode label as sequential number
     return label_map
 
-  def convert_color_to_label(self):
-    """ converts RGB label to original label index
-    """
-    label_map = np.ndarray(shape=self.proj_color.shape[:2], dtype=int)
-    label_map[:, :] = -1
-    for idx, rgb in self.color_dict.items():
-      # need to switch to BGR for comparison
-      t = rgb[2]
-      rgb[2] = rgb[0]
-      rgb[0] = t
-      label_map[((self.proj_color).astype(np.uint8) == rgb).all(2)] = idx
-    assert((label_map < 0).sum() == 0)
-    # TODO
-    return label_map
-
-  def create_rays(self):
+  def create_rays(self, fov_up, fov_down, H, W):
     beams = []
-    fov_up = self.fov_up
-    fov_down = self.fov_down
 
     # TODO pass parameter for rays
 
@@ -943,23 +927,23 @@ class MultiSemLaserScan():
 
     # correct initial rotation of sensor
     initial = 180
-    yaw_angles = (np.linspace(0, 360, self.W) + initial)
+    yaw_angles = (np.linspace(0, 360, W) + initial)
     larger = yaw_angles > 360
     yaw_angles[larger] -= 360
     yaw_angles = yaw_angles / 180. * np.pi
-    pitch = np.linspace(fov_up, fov_down, self.H) / 180. * np.pi
+    pitch = np.linspace(fov_up, fov_down, H) / 180. * np.pi
     pitch = np.pi / 2 - pitch
     yaw = yaw_angles
     for p in pitch:
       point_x = np.sin(p) * np.cos(-yaw)
       point_y = np.sin(p) * np.sin(-yaw)
       point_z = np.cos(p) * np.ones(yaw.shape)
-      point_x = point_x.reshape(self.W, 1)
-      point_y = point_y.reshape(self.W, 1)
-      point_z = point_z.reshape(self.W, 1)
+      point_x = point_x.reshape(W, 1)
+      point_y = point_y.reshape(W, 1)
+      point_z = point_z.reshape(W, 1)
       single_column = np.concatenate((point_x, point_y, point_z), axis=1)
       beams.append(single_column)
-    beams = np.array(beams).reshape(self.W * self.H, -1)
+    beams = np.array(beams).reshape(W * H, -1)
     return np.ascontiguousarray(beams.astype(np.float32))
 
   def write(self, out_dir, idx, range_image=False):
@@ -975,6 +959,7 @@ class MultiSemLaserScan():
     else:
     back_points = self.back_points.reshape(-1, 3)
     label_image = self.label_image.reshape(-1)
+
       index = label_image >= 0  # TODO there should be no -1
     back_points = back_points[index]
     label_image = label_image[index].astype(np.int32)
@@ -1024,6 +1009,7 @@ def compare(scan_source, scan_target):
 
   assert(source_color.size == target_color.size)
   assert(source_label.size == target_label.size)
+
   # Mask out no data (= black) in target scan
   black_values = np.sum(source_color, axis=2) == 0
   source_label[black_values] = 0
@@ -1041,20 +1027,19 @@ def compare(scan_source, scan_target):
   # Ignore empty classes
   unique_values = np.union1d(np.unique(source_label), np.unique(target_label))
 
-  # TODO wrong empty classes change np.arange to real index and so on
-  # empty = np.isin(np.arange(scan_source.nclasses), unique_values,
-  #                 invert=True)
-  # empty = np.zeros((scan_source.nclasses, ), dtype=bool)
   for i, value in enumerate(unique_values):
     mask_source = source_label == value
     mask_target = target_label == value
     source_label[mask_source] = i
     target_label[mask_target] = i
-  #   if mask_source.sum() > 0 & mask_target.sum() > 0:
-  #     empty[i] = True
+
+  unique_values = np.union1d(np.unique(source_label), np.unique(target_label))
+  empty = np.isin(np.arange(scan_source.nclasses), unique_values,
+                  invert=True)
 
   # Evaluate by label
-  eval = iouEval(scan_source.nclasses, [])
+  eval = iouEval(scan_source.nclasses,
+                 np.arange(scan_source.nclasses)[empty])
   eval.addBatch(target_label, source_label)
   m_iou, iou = eval.getIoU()
   print("IoU class: ", (iou * 100).astype(int))
