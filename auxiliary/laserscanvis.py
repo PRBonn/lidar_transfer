@@ -15,6 +15,7 @@ class LaserScanVis():
     self.W = W
     self.H = H
     self.show_mesh = show_mesh
+    self.point_size = 2
     self.frame = 0
     self.nframes = 0
     self.show_diff = show_diff
@@ -28,8 +29,8 @@ class LaserScanVis():
     self.action = "no"  # no, next, back, quit are the possibilities
 
     # NEW canvas prepared for visualizing laserscan data
-    self.scan_canvas = SceneCanvas(
-        keys='interactive', show=True, title='', size=(1600, 600))
+    self.scan_canvas = SceneCanvas(keys='interactive', show=True, title='',
+                                   size=(1600, 600), bgcolor='white')
     self.scan_canvas.events.key_press.connect(self.key_press)
     self.grid_view = self.scan_canvas.central_widget.add_grid()
     
@@ -130,7 +131,7 @@ class LaserScanVis():
       self.scan_vis.set_data(scan.points,
                              face_color=scan.label_color[..., ::-1],
                              edge_color=scan.label_color[..., ::-1],
-                             size=1)
+                             size=self.point_size)
     else:
       power = 16
       range_data = np.copy(scan.unproj_range)
@@ -144,7 +145,7 @@ class LaserScanVis():
       self.scan_vis.set_data(scan.points,
                              face_color=viridis_colors[..., ::-1],
                              edge_color=viridis_colors[..., ::-1],
-                             size=1)
+                             size=self.point_size)
     self.scan_vis.update()
 
     # plot range image
@@ -163,7 +164,7 @@ class LaserScanVis():
       self.back_vis.set_data(points,
                              face_color=label_color[..., ::-1],
                              edge_color=label_color[..., ::-1],
-                             size=1)
+                             size=self.point_size)
     else:
       power = 16
       range_data = np.copy(scan.get_scan(0).unproj_range)
@@ -178,7 +179,7 @@ class LaserScanVis():
       self.back_vis.set_data(scan.get_scan(0).points,
                              face_color=viridis_colors[..., ::-1],
                              edge_color=viridis_colors[..., ::-1],
-                             size=1)
+                             size=self.point_size)
     self.back_vis.update()
 
     # plot label image test
@@ -317,7 +318,7 @@ class LaserScanVis():
     self.back_vis.set_data(points,
                            face_color=colors[..., ::-1],
                            edge_color=colors[..., ::-1],
-                            size=3)
+                           size=self.point_size)
     self.back_vis.update()
 
     # plot range image test
