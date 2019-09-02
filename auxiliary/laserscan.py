@@ -852,13 +852,11 @@ class MultiSemLaserScan():
       self.merged.do_label_projection_new()
 
 
-      # vol_bnds = self.vol_bnds
-      vol_bnds = np.array([[-50, 50], [-50, 50], [-3, 2]])  # TODO max bnds
-      # Automatically set voxel bounds by examining the complete point cloud
-      # if vol_bnds.all() is None:
-        # vol_bnds = self.merged.get_bnds()
-      # else:
+      # Get voxel bounds by examining the complete point cloud
       merged_bnds = np.rint(self.merged.get_bnds()).astype(int)
+
+      # Limit voxel bounds by given max bounds
+      vol_bnds = self.vol_bnds
       vol_bnds[:, 0] = np.maximum(vol_bnds[:, 0], merged_bnds[:, 0])
       vol_bnds[:, 1] = np.minimum(vol_bnds[:, 1], merged_bnds[:, 1])
 
@@ -944,8 +942,8 @@ class MultiSemLaserScan():
       point_x = point_x.reshape(W, 1)
       point_y = point_y.reshape(W, 1)
       point_z = point_z.reshape(W, 1)
-      single_column = np.concatenate((point_x, point_y, point_z), axis=1)
-      beams.append(single_column)
+      single_row = np.concatenate((point_x, point_y, point_z), axis=1)
+      beams.append(single_row)
     beams = np.array(beams).reshape(W * H, -1)
     return np.ascontiguousarray(beams.astype(np.float32))
 
