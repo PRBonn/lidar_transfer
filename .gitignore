@@ -1,5 +1,11 @@
 # Custom
 output
+auxiliary/raytracer/.nfs0*
+*.ppm
+auxiliary/raytracer/RayTracerCython.cpp
+*.pdf
+*.svg
+*.png
 
 # Created by https://www.gitignore.io/api/macos,python
 # Edit at https://www.gitignore.io/?templates=macos,python

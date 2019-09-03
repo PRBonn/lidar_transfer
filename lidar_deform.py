@@ -2,11 +2,11 @@
 
 import argparse
 import os
+import time
 import yaml
 import numpy as np
-from auxiliary.laserscan import LaserScan, SemLaserScan, MultiSemLaserScan
+from auxiliary.laserscan import *
 from auxiliary.laserscanvis import LaserScanVis
-from auxiliary.progressbar import progressbar
 
 
 def parse_calibration(filename):
@@ -112,6 +112,24 @@ if __name__ == '__main__':
       default="output/",
       help='Output folder to write bin files to. Defaults to %(default)s',
   )
+  parser.add_argument(
+      '--batch', '-b',
+      action='store_true',
+      required=False,
+      help='Run in batch mode.',
+  )
+  parser.add_argument(
+      '--write', '-w',
+      action='store_true',
+      required=False,
+      help='Write new dataset to file.',
+  )
+  parser.add_argument(
+      '--one_scan',
+      action='store_true',
+      required=False,
+      help='Run only once.',
+  )
   FLAGS, unparsed = parser.parse_known_args()
 
   # print summary of what we will do
@@ -122,15 +140,36 @@ if __name__ == '__main__':
   print("Sequence", FLAGS.sequence)
   print("Target", FLAGS.target)
   print("offset", FLAGS.offset)
+  print("batch mode", FLAGS.batch)
   print("*" * 80)
 
   # open config file
   try:
     print("Opening config file %s" % FLAGS.config)
-    CFG = yaml.load(open(FLAGS.config, 'r'))
+    CFG = yaml.safe_load(open(FLAGS.config, 'r'))
   except Exception as e:
     print(e)
     print("Error opening yaml file.")
+    quit()
+
+  # does output folder and subfolder exists?
+  if FLAGS.write:
+  if os.path.isdir(FLAGS.output):
+    out_path = os.path.join(FLAGS.output, "sequences", FLAGS.sequence)
+    out_scan_paths = os.path.join(out_path, "velodyne")
+    out_label_paths = os.path.join(out_path, "labels")
+    if os.path.isdir(out_scan_paths) and os.path.isdir(out_label_paths):
+      print("Output folder with subfolder exists! %s" % FLAGS.output)
+      if os.listdir(out_scan_paths):
+        print("Output folder velodyne is not empty! Data will be overwritten!")
+      if os.listdir(out_label_paths):
+        print("Output folder label is not empty! Data will be overwritten!")
+    else:
+      os.makedirs(out_scan_paths)
+      os.makedirs(out_label_paths)
+      print("Created subfolder in output folder %s!" % FLAGS.output)
+  else:
+    print("Output folder doesn't exist! Exiting...")
     quit()
 
   # does sequence folder exist?
@@ -169,10 +208,10 @@ if __name__ == '__main__':
     scan_config_path = os.path.join(FLAGS.dataset, "sequences",
                                     FLAGS.sequence, "config.yaml")
     print("Opening config file", scan_config_path)
-    scan_config = yaml.load(open(scan_config_path, 'r'))
+    scan_config = yaml.safe_load(open(scan_config_path, 'r'))
   except Exception as e:
     print(e)
-    print("Error opening yaml file.")
+    print("Error opening config.yaml file %s." % scan_config_path)
     quit()
 
   # read calib.txt of dataset
@@ -202,7 +241,8 @@ if __name__ == '__main__':
   # projection = scan_config['projection']
   fov_up = scan_config['fov_up']
   fov_down = scan_config['fov_down']
-  beams = scan_config['beams'] # TODO change to more general description height?
+  # TODO change to more general description height?
+  beams = scan_config['beams']
   angle_res_hor = scan_config['angle_res_hor']
   fov_hor = scan_config['fov_hor']
   try:
@@ -227,10 +267,10 @@ if __name__ == '__main__':
     if FLAGS.target == '':
       FLAGS.target = scan_config_path
     print("Opening target config file", FLAGS.target)
-    target_config = yaml.load(open(FLAGS.target, 'r'))
+    target_config = yaml.safe_load(open(FLAGS.target, 'r'))
   except Exception as e:
     print(e)
-    print("Error opening yaml file.")
+    print("Error opening target yaml file %." & FLAGS.target)
     quit()
 
   # target parameter to deform to
@@ -238,7 +278,7 @@ if __name__ == '__main__':
   # t_projection = target_config['projection']
   t_fov_up = target_config['fov_up']
   t_fov_down = target_config['fov_down']
-  t_beams = target_config['beams'] # TODO change to more general description height?
+  t_beams = target_config['beams']  # TODO see above
   t_angle_res_hor = target_config['angle_res_hor']
   t_fov_hor = target_config['fov_hor']
   t_W = int(t_fov_hor / t_angle_res_hor)
@@ -246,11 +286,14 @@ if __name__ == '__main__':
     t_beam_angles = target_config['beam_angles']
     t_beam_angles.sort()
   except Exception as e:
+    t_beam_angles = None
     print("No beam angles in target config: calculate equidistant angles")
 
   # Approach parameter
-  adaption = CFG["adaption"]  #['mesh', 'catmesh', 'cp']
-  number_of_scans = CFG["number_of_scans"]
+  adaption = CFG["adaption"]  # ['mesh', 'catmesh', 'cp']
+  voxel_size = CFG["voxel_size"]
+  voxel_bounds = np.array(CFG["voxel_bounds"])
+  nscans = CFG["number_of_scans"]
   ignore_classes = CFG["ignore"]
   moving_classes = CFG["moving"]
   transformation = CFG["transformation"]
@@ -265,25 +308,51 @@ if __name__ == '__main__':
   print("Beam angles", t_beam_angles)
   print("*" * 80)
   print("CONFIG:")
-  print("Aggregate", number_of_scans, "scans")
+  print("Aggregate", nscans, "scans")
   print("Transformation", transformation)
   print("Adaption", adaption)
+  print("Voxel size", voxel_size)
+  print("Voxel bounds", voxel_bounds)
   print("Ignore classes", ignore_classes)
   print("Moving classes", moving_classes)
   print("*" * 80)
+
+  try:
+    voxel_bounds = voxel_bounds.reshape(3, 2)
+  except Exception as e:
+    print("No voxel boundaries set")
+
+  try:
+    increment = CFG["batch_interval"]
+  except Exception as e:
+    increment = 1
 
   # create a scan
   color_dict = CFG["color_map"]
   nclasses = len(color_dict)
   scan = SemLaserScan(beams, W, nclasses, color_dict)
-  scans = MultiSemLaserScan(t_beams, t_W, nclasses, adaption,
-                            ignore_classes, moving_classes, color_dict,
-                            transformation=transformation)
+  scans = MultiSemLaserScan(t_beams, t_W, nscans, nclasses,
+                            ignore_classes, moving_classes,
+                            t_fov_up, t_fov_down, color_dict,
+                            transformation=transformation,
+                            voxel_size=voxel_size, vol_bnds=voxel_bounds)
 
+  batch = FLAGS.batch
   # create a visualizer
-  vis = LaserScanVis([W, t_W], [beams, t_beams])
+  if batch is False:
+    show_diff = False
+    show_mesh = False
+    show_range = True
+    if t_beams == beams:
+      show_diff = True  # show diff only if comparison is possible
+    if "mesh" in adaption:
+      show_mesh = True
+    vis = LaserScanVis([W, t_W], [beams, t_beams], show_diff=show_diff,
+                       show_range=show_range, show_mesh=show_mesh)
+    vis.nframes = len(scan_names)
 
   # print instructions
+  if batch is False:
   print("To navigate:")
   print("\tb: back (previous scan)")
   print("\tn: next (next scan)")
@@ -291,40 +360,79 @@ if __name__ == '__main__':
 
   idx = FLAGS.offset
   while True:
-    progressbar("Scan", idx, len(scan_names))
-
+    t0_elapse = time.time()
     # open pointcloud
     scan.open_scan(scan_names[idx], fov_up, fov_down)
     scan.open_label(label_names[idx])
     scan.colorize()
+    scan.remove_classes(ignore_classes)
+    scan.do_range_projection(fov_up, fov_down, remove=True)
+    scan.do_label_projection()
 
     # open multiple scans
-    scans.open_multiple_scans(scan_names, label_names, poses, idx,
-                              number_of_scans, t_fov_up, t_fov_down)
+    scans.open_multiple_scans(scan_names, label_names, poses, idx)
+
+    # run approach
+    verts, verts_colors, faces = scans.deform(adaption, poses, idx)
+    if t_beams == beams and t_W == W:
+      label_diff, range_diff, m_iou, m_acc, MSE = compare(scan, scans)
+      if batch is False:
+        vis.set_diff2(label_diff, range_diff, m_iou, m_acc, MSE)
+    s = time.time() - t0_elapse
+    print("Took: %.2fs" % (s))
+
+    if batch is False:
+      # pass to visualizer
+      vis.frame = idx
+      vis.set_laserscan(scan)
+      if adaption == 'cp':  # closest point
+        vis.set_laserscans(scans)
+        vis.set_data(scan, scans)
+      elif adaption == 'mesh':
+        vis.set_points(scans.back_points, scans.label_color, t_W, t_beams)
+        vis.set_data(scan, scans, verts=verts, verts_colors=verts_colors,
+                     faces=faces, W=t_W, H=t_beams)
+      elif adaption == 'mergemesh':
+        vis.set_points(scans.back_points, scans.label_color, t_W, t_beams)
+        vis.set_data(scan, scans, verts=verts, verts_colors=verts_colors,
+                     faces=faces, W=t_W, H=t_beams)
+      elif adaption == 'catmesh':
+        # TODO Category Mesh
+        quit()
+      else:
+        # Error
+        print("\nAdaption method not recognized or not defined")
+        quit()
 
     # Export backprojected point cloud (+ range image)
-    # TODO check folder existence earlier
-    scans.write(FLAGS.output, idx)
+    # TODO write config to export path
+    if FLAGS.write:
+    scans.write(out_path, idx)
 
-    # pass to visualizer
-    vis.set_laserscan(scan)
-    # vis.set_laserscan2(scan2)
-    vis.set_laserscan2(scans, poses[idx])
 
-    # get user choice
-    while True:
-      choice = vis.get_action(0.01)
-      if choice != "no":
-        break
-    if choice == "next":
-      # take into account that we look further than one scan
-      idx = (idx + 1) % (len(scan_names) - number_of_scans)
-      continue
-    if choice == "back":
-      idx -= 1
-      if idx < 0:
-        idx = len(scan_names) - 1
-      continue
-    elif choice == "quit":
-      print()
+    if FLAGS.one_scan:
+      quit()
+
+    if batch:
+      idx = idx + increment
+      if idx >= (len(scan_names) - (nscans - 1)):
+        quit()
+      print("#" * 30, FLAGS.sequence, "-", idx, "/", len(scan_names), "#" * 30)
+    else:
+      # get user choice
+      while True:
+        choice = vis.get_action(0.01)
+        if choice != "no":
+          break
+      if choice == "next":
+        # take into account that we look further than one scan
+        idx = (idx + 1) % (len(scan_names) - (nscans - 1))
+        continue
+      if choice == "back":
+        idx -= 1
+        if idx < 0:
+          idx = len(scan_names) - 1
+        continue
+      elif choice == "quit":
+        print()
       break
