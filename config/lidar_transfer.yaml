@@ -2,7 +2,7 @@
 transformation: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
 adaption: 'mergemesh'
 number_of_scans: 1
-voxel_size: 0.04
+preserve_float: True
 batch_interval: 10
 #              xmin xmax ymin ymax zmin zmax
 voxel_bounds: [ -50,  50, -50,  50,  -3,   2]

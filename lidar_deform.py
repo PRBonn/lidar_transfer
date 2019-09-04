@@ -154,23 +154,39 @@ if __name__ == '__main__':
 
   # does output folder and subfolder exists?
   if FLAGS.write:
-  if os.path.isdir(FLAGS.output):
-    out_path = os.path.join(FLAGS.output, "sequences", FLAGS.sequence)
-    out_scan_paths = os.path.join(out_path, "velodyne")
-    out_label_paths = os.path.join(out_path, "labels")
-    if os.path.isdir(out_scan_paths) and os.path.isdir(out_label_paths):
-      print("Output folder with subfolder exists! %s" % FLAGS.output)
-      if os.listdir(out_scan_paths):
-        print("Output folder velodyne is not empty! Data will be overwritten!")
-      if os.listdir(out_label_paths):
-        print("Output folder label is not empty! Data will be overwritten!")
+    print("Output folder is %s" % FLAGS.output)
+    if os.path.isdir(FLAGS.output):
+      out_path = os.path.join(FLAGS.output, "sequences", FLAGS.sequence)
+      out_scan_paths = os.path.join(out_path, "velodyne")
+      out_label_paths = os.path.join(out_path, "labels")
+      if os.path.isdir(out_scan_paths) and os.path.isdir(out_label_paths):
+        print("Output folder with subfolder exists! %s" % FLAGS.output)
+        if os.listdir(out_scan_paths):
+          print("Output folder velodyne is not empty! " +
+                "Data will be overwritten!")
+        if os.listdir(out_label_paths):
+          print("Output folder label is not empty! Data will be overwritten!")
+      else:
+        os.makedirs(out_scan_paths)
+        os.makedirs(out_label_paths)
+        print("Created subfolder in output folder %s!" % FLAGS.output)
+
+      png_scan_paths = os.path.join(out_path, "velodyne_png")
+      png_label_paths = os.path.join(out_path, "labels_png")
+      if os.path.isdir(png_scan_paths) and os.path.isdir(png_label_paths):
+        print("Output folder with subfolder exists! %s" % FLAGS.output)
+        if os.listdir(png_scan_paths):
+          print("Output folder velodyne is not empty! " +
+                "Data will be overwritten!")
+        if os.listdir(png_label_paths):
+          print("Output folder label is not empty! Data will be overwritten!")
+      else:
+        os.makedirs(png_scan_paths)
+        os.makedirs(png_label_paths)
+        print("Created subfolder in output folder %s!" % FLAGS.output)
     else:
-      os.makedirs(out_scan_paths)
-      os.makedirs(out_label_paths)
-      print("Created subfolder in output folder %s!" % FLAGS.output)
-  else:
-    print("Output folder doesn't exist! Exiting...")
-    quit()
+      print("Output folder doesn't exist! Exiting...")
+      quit()
 
   # does sequence folder exist?
   scan_paths = os.path.join(FLAGS.dataset, "sequences",
@@ -205,8 +221,7 @@ if __name__ == '__main__':
 
   # read config.yaml of dataset
   try:
-    scan_config_path = os.path.join(FLAGS.dataset, "sequences",
-                                    FLAGS.sequence, "config.yaml")
+    scan_config_path = os.path.join(FLAGS.dataset, "config.yaml")
     print("Opening config file", scan_config_path)
     scan_config = yaml.safe_load(open(scan_config_path, 'r'))
   except Exception as e:
@@ -291,6 +306,7 @@ if __name__ == '__main__':
 
   # Approach parameter
   adaption = CFG["adaption"]  # ['mesh', 'catmesh', 'cp']
+  preserve_float = CFG["preserve_float"]
   voxel_size = CFG["voxel_size"]
   voxel_bounds = np.array(CFG["voxel_bounds"])
   nscans = CFG["number_of_scans"]
@@ -311,6 +327,7 @@ if __name__ == '__main__':
   print("Aggregate", nscans, "scans")
   print("Transformation", transformation)
   print("Adaption", adaption)
+  print("Preserve Float", preserve_float)
   print("Voxel size", voxel_size)
   print("Voxel bounds", voxel_bounds)
   print("Ignore classes", ignore_classes)
@@ -330,16 +347,9 @@ if __name__ == '__main__':
   # create a scan
   color_dict = CFG["color_map"]
   nclasses = len(color_dict)
-  scan = SemLaserScan(beams, W, nclasses, color_dict)
-  scans = MultiSemLaserScan(t_beams, t_W, nscans, nclasses,
-                            ignore_classes, moving_classes,
-                            t_fov_up, t_fov_down, color_dict,
-                            transformation=transformation,
-                            voxel_size=voxel_size, vol_bnds=voxel_bounds)
 
-  batch = FLAGS.batch
   # create a visualizer
-  if batch is False:
+  if FLAGS.batch is False:
     show_diff = False
     show_mesh = False
     show_range = True
@@ -352,15 +362,30 @@ if __name__ == '__main__':
     vis.nframes = len(scan_names)
 
   # print instructions
-  if batch is False:
-  print("To navigate:")
-  print("\tb: back (previous scan)")
-  print("\tn: next (next scan)")
-  print("\tq: quit (exit program)")
+  if FLAGS.batch is False:
+    print("To navigate:")
+    print("\tb: back (previous scan)")
+    print("\tn: next (next scan)")
+    print("\tq: quit (exit program)")
 
   idx = FLAGS.offset
+  number_of_prev_scans = nscans // 2
+  number_of_next_scans = nscans - number_of_prev_scans
+  if number_of_prev_scans > idx:
+    idx += number_of_prev_scans - idx
+    print("Automatic offset %d" % (number_of_prev_scans))
+
   while True:
     t0_elapse = time.time()
+
+    scan = SemLaserScan(beams, W, nclasses, color_dict)
+    scans = MultiSemLaserScan(t_beams, t_W, nscans, nclasses,
+                              ignore_classes, moving_classes,
+                              t_fov_up, t_fov_down, color_dict,
+                              # target_settings
+                              transformation=transformation,
+                              preserve_float=preserve_float,
+                              voxel_size=voxel_size, vol_bnds=voxel_bounds)
     # open pointcloud
     scan.open_scan(scan_names[idx], fov_up, fov_down)
     scan.open_label(label_names[idx])
@@ -376,12 +401,12 @@ if __name__ == '__main__':
     verts, verts_colors, faces = scans.deform(adaption, poses, idx)
     if t_beams == beams and t_W == W:
       label_diff, range_diff, m_iou, m_acc, MSE = compare(scan, scans)
-      if batch is False:
+      if FLAGS.batch is False:
         vis.set_diff2(label_diff, range_diff, m_iou, m_acc, MSE)
     s = time.time() - t0_elapse
     print("Took: %.2fs" % (s))
 
-    if batch is False:
+    if FLAGS.batch is False:
       # pass to visualizer
       vis.frame = idx
       vis.set_laserscan(scan)
@@ -407,17 +432,17 @@ if __name__ == '__main__':
     # Export backprojected point cloud (+ range image)
     # TODO write config to export path
     if FLAGS.write:
-    scans.write(out_path, idx)
-
+      scans.write(out_path, idx)
 
     if FLAGS.one_scan:
       quit()
 
-    if batch:
+    if FLAGS.batch:
       idx = idx + increment
       if idx >= (len(scan_names) - (nscans - 1)):
         quit()
-      print("#" * 30, FLAGS.sequence, "-", idx, "/", len(scan_names), "#" * 30)
+      print("#" * 30, FLAGS.sequence, "-", idx, "/", len(scan_names),
+            "#" * 30)
     else:
       # get user choice
       while True:
