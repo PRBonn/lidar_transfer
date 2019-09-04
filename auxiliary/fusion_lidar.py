@@ -41,8 +41,10 @@ class TSDFVolume(object):
 
     # Initialize pointers to voxel volume in CPU memory
     self._tsdf_vol_cpu = np.ones(self._vol_dim).astype(np.float32)
-    self._weight_vol_cpu = np.zeros(self._vol_dim).astype(np.float32) # for computing the cumulative moving average of observations per voxel
+    # for computing the cumulative moving average of observations per voxel
+    self._weight_vol_cpu = np.zeros(self._vol_dim).astype(np.float32)
     self._color_vol_cpu = np.zeros(self._vol_dim).astype(np.float32)
+    self._rem_vol_cpu = np.zeros(self._vol_dim).astype(np.float32)
 
     # Copy voxel volumes to GPU
     if FUSION_GPU_MODE:
@@ -52,6 +54,8 @@ class TSDFVolume(object):
       cuda.memcpy_htod(self._weight_vol_gpu,self._weight_vol_cpu)
       self._color_vol_gpu = cuda.mem_alloc(self._color_vol_cpu.nbytes)
       cuda.memcpy_htod(self._color_vol_gpu,self._color_vol_cpu)
+      self._rem_vol_gpu = cuda.mem_alloc(self._rem_vol_cpu.nbytes)
+      cuda.memcpy_htod(self._rem_vol_gpu,self._rem_vol_cpu)
 
       # Cuda kernel function (C++)
       self._cuda_src_mod = SourceModule("""
@@ -61,12 +65,14 @@ class TSDFVolume(object):
         __global__ void integrate(float * tsdf_vol,
                                   float * weight_vol,
                                   float * color_vol,
+                                  float * rem_vol,
                                   float * vol_dim,
                                   float * vol_origin,
                                   float * cam_pose,
                                   float * other_params,
                                   float * color_im,
-                                  float * depth_im) {
+                                  float * depth_im,
+                                  float * rem_im) {
 
           // Get voxel index
           int gpu_loop_idx = (int) other_params[0];
@@ -104,7 +110,7 @@ class TSDFVolume(object):
           float cam_pt_z = pt_z;
           float cam_pt_y = pt_y;
 
-          // TODO spherical projection
+          // spherical projection
           int im_h = (int) other_params[2];
           int im_w = (int) other_params[3];
           float fov_up = other_params[6] * PI / 180.0;
@@ -169,6 +175,10 @@ class TSDFVolume(object):
           new_r = fmin(roundf((old_r*w_old+new_r)/w_new),255.0f);
           color_vol[voxel_idx] = new_b*256*256+new_g*256+new_r;
 
+          // Integrate remissions
+          float old_rem = rem_vol[voxel_idx];
+          float new_rem = rem_im[pixel_y*im_w+pixel_x];
+          rem_vol[voxel_idx] = (old_rem*w_old+new_rem)/w_new;
         }""")
 
       self._cuda_integrate = self._cuda_src_mod.get_function("integrate")
@@ -183,7 +193,7 @@ class TSDFVolume(object):
       self._max_gpu_grid_dim = np.array([grid_dim_x,grid_dim_y,grid_dim_z]).astype(int)
       self._n_gpu_loops = int(np.ceil(float(np.prod(self._vol_dim))/float(np.prod(self._max_gpu_grid_dim)*self._max_gpu_threads_per_block)))
 
-  def integrate(self,color_im,depth_im,cam_pose,obs_weight=1.):
+  def integrate(self,color_im,depth_im,rem_im,cam_pose,obs_weight=1.):
     """ Data should be in world frame with pose transformation applied
         Not using the cam_pose input!
     """
@@ -201,12 +211,14 @@ class TSDFVolume(object):
         self._cuda_integrate(self._tsdf_vol_gpu,
                               self._weight_vol_gpu,
                               self._color_vol_gpu,
+                             self._rem_vol_gpu,
                               cuda.InOut(self._vol_dim.astype(np.float32)),
                               cuda.InOut(self._vol_origin.astype(np.float32)),
                               cuda.InOut(cam_pose.reshape(-1).astype(np.float32)),
                               cuda.InOut(np.asarray([gpu_loop_idx,self._voxel_size,im_h,im_w,self._trunc_margin,obs_weight,self.fov_up,self.fov_down],np.float32)),
                               cuda.InOut(color_im.reshape(-1).astype(np.float32)),
                               cuda.InOut(depth_im.reshape(-1).astype(np.float32)),
+                             cuda.InOut(rem_im.reshape(-1).astype(np.float32)),
                               block=(self._max_gpu_threads_per_block,1,1),
                               grid=(int(self._max_gpu_grid_dim[0]),int(self._max_gpu_grid_dim[1]),int(self._max_gpu_grid_dim[2])))
 
@@ -288,47 +300,68 @@ class TSDFVolume(object):
       new_r = np.minimum(np.round(np.divide(np.multiply(old_r,w_old)+new_r,w_new)),255.)
       self._color_vol_cpu[vox_coords[0,valid_pts],vox_coords[1,valid_pts],vox_coords[2,valid_pts]] = new_b*256.*256.+new_g*256.+new_r
 
+      # TODO Integrate remissions for CPU
 
   # Copy voxel volume to CPU
   def get_volume(self):
     if FUSION_GPU_MODE:
       cuda.memcpy_dtoh(self._tsdf_vol_cpu,self._tsdf_vol_gpu)
       cuda.memcpy_dtoh(self._color_vol_cpu,self._color_vol_gpu)
-    return self._tsdf_vol_cpu,self._color_vol_cpu
+      cuda.memcpy_dtoh(self._rem_vol_cpu,self._rem_vol_gpu)
+    return self._tsdf_vol_cpu, self._color_vol_cpu, self._rem_vol_cpu
 
 
   # Get mesh of voxel volume via marching cubes
-  def get_mesh(self):
-    tsdf_vol, color_vol = self.get_volume()
+  def get_mesh(self, color_lut):
+    tsdf_vol, color_vol, rem_vol = self.get_volume()
 
     # Marching cubes
     verts, faces, norms, vals = measure.marching_cubes_lewiner(tsdf_vol, level=0)
     verts_ind = np.round(verts).astype(int)
-    verts = verts*self._voxel_size+self._vol_origin # voxel grid coordinates to world coordinates
+
+    # voxel grid coordinates to world coordinates
+    verts = verts*self._voxel_size+self._vol_origin
 
     # Get vertex colors
     rgb_vals = color_vol[verts_ind[:,0],verts_ind[:,1],verts_ind[:,2]]
+
+    # Get vertex remissioins
+    rem = rem_vol[verts_ind[:,0],verts_ind[:,1],verts_ind[:,2]]
     colors_b = np.floor(rgb_vals/(256*256))
     colors_g = np.floor((rgb_vals-colors_b*256*256)/256)
     colors_r = rgb_vals-colors_b*256*256-colors_g*256
     colors = np.floor(np.asarray([colors_r,colors_g,colors_b])).T
     colors = colors.astype(np.uint8)
-    return verts, faces, norms, colors
+    return verts, faces, norms, colors, rem
 
   def throw_rays_at_mesh(self, rays, origin, H, W, color_lut):
     print("Get mesh by marching cubes...")
-    verts, faces, norms, colors = self.get_mesh(color_lut)
+    verts, faces, norms, colors, rem = self.get_mesh(color_lut)
+
 
     # Arrays must be contiguous and 1D
     verts_c = np.ascontiguousarray(verts.reshape(-1))
     faces_c = np.ascontiguousarray(faces.reshape(-1))
     colors_c = np.ascontiguousarray(colors.reshape(-1).astype(np.int32))
+    rem_c = np.ascontiguousarray(rem.reshape(-1))
     rays = rays.reshape(-1)
 
+    ray_endpoints = np.ascontiguousarray(np.zeros((H, W, 3)).reshape(-1)
+                                         .astype(np.float32))
+    ray_colors = np.ascontiguousarray(np.zeros((H, W, 3)).reshape(-1)
+                                      .astype(np.int32))
+    range_image = np.ascontiguousarray(np.zeros((H, W)).reshape(-1)
+                                       .astype(np.float32))
+    rem_image = np.ascontiguousarray(np.zeros((H, W)).reshape(-1)
+                                     .astype(np.float32))
+
     print("Raytracing...")
-    # ray_endpoints, ray_colors = rt.ray_mesh_intersection(rays, origin, verts, colors, faces, H, W)
-    ray_endpoints, ray_colors, range_image = rtc.C_Trace(rays, origin, verts_c, faces_c, colors_c, H, W)
-    return ray_endpoints, ray_colors, verts, colors, faces, range_image
+    rtc.C_Trace(rays, origin, verts_c, faces_c, colors_c, rem_c, ray_endpoints,
+                ray_colors, range_image, rem_image, H, W)
+
+    return ray_endpoints.reshape(-1,3), ray_colors.reshape(-1,3), \
+      verts, colors, faces, range_image.reshape(-1,W), rem_image.reshape(-1, W)
+
 
 # -------------------------------------------------------------------------------
 # Additional helper functions
@@ -356,7 +389,11 @@ def meshwrite(filename,verts,faces,norms,colors):
 
   # Write vertex list
   for i in range(verts.shape[0]):
-    ply_file.write("%f %f %f %f %f %f %d %d %d\n"%(verts[i,0],verts[i,1],verts[i,2],norms[i,0],norms[i,1],norms[i,2],colors[i,0],colors[i,1],colors[i,2]))
+    ply_file.write("%f %f %f %f %f %f %d %d %d\n" % (verts[i, 0], verts[i, 1],
+                                                     verts[i, 2], norms[i, 0],
+                                                     norms[i, 1], norms[i, 2],
+                                                     colors[i, 0], colors[i, 1],
+                                                     colors[i, 2]))
   
   # Write face list
   for i in range(faces.shape[0]):

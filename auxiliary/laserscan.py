@@ -807,7 +807,8 @@ class MultiSemLaserScan():
         # Pose transformation already applied
         proj_label3 = np.zeros(scan.proj_color.shape)
         proj_label3[:, :, 0] = scan.proj_label
-        tsdf_vol.integrate(proj_label3, scan.proj_range, np.eye(3),
+        tsdf_vol.integrate(proj_label3, scan.proj_range,
+                           scan.proj_remissions, np.eye(3),
                            obs_weight=1.)
       fps = self.nscans / (time.time() - t0_elapse)
       print("Average FPS: %.2f" % (fps))
@@ -816,7 +817,7 @@ class MultiSemLaserScan():
       origin = np.array([0, 0, 0]).astype(np.float32)
       t0_elapse = time.time()
       self.back_points, label_color, \
-          verts, colors, faces, self.proj_range = \
+          verts, colors, faces, self.proj_range, rem_image = \
           tsdf_vol.throw_rays_at_mesh(rays, origin, self.H, self.W,
                                       self.scans[0].color_lut)
 
@@ -870,7 +871,7 @@ class MultiSemLaserScan():
       proj_label3 = np.zeros(self.merged.proj_color.shape)
       proj_label3[:, :, 0] = self.merged.proj_label
       tsdf_vol.integrate(proj_label3, self.merged.proj_range,
-                         np.eye(3), obs_weight=1.)
+                         self.merged.proj_remissions, np.eye(3), obs_weight=1.)
       fps = 1.0 / (time.time() - t0_elapse)
       print("Average FPS: %.2f" % (fps))
 
@@ -878,8 +879,7 @@ class MultiSemLaserScan():
       origin = np.array([0, 0, 0]).astype(np.float32)
       t0_elapse = time.time()
       self.back_points, label_color, \
-          verts, colors, faces, self.proj_range = \
-          tsdf_vol.throw_rays_at_mesh(rays, origin, self.H, self.W,
+          verts, colors, faces, self.proj_range, self.proj_remissions = \
                                       self.scans[0].color_lut)
       # proj_color    H x W x 3   [0,1]   -> colors for projected label image
       # label_color   back x 3    [0,1]   -> same as above, but same dim as points

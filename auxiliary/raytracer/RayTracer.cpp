@@ -17,8 +17,8 @@ Vector3 randVector3() {
 }
 
 void trace(float* rays, float* origin_in, float* verts, int* faces, int* colors,
-           int n_rays, int n_verts, int n_faces, int height,
-           float* endpoints, int* endcolors, float* range) {
+           float * rem, int n_rays, int n_verts, int n_faces, int height,
+           float* endpoints, int* endcolors, float* range, float * endrem) {
   vector<Object*> objects;
 
   // for(int i=0; i<10; ++i) {
@@ -30,17 +30,24 @@ void trace(float* rays, float* origin_in, float* verts, int* faces, int* colors,
 
   printf("Constructing %d triangles...\n", n_faces);
   for(int i=0; i<n_faces; ++i) {
+    Vector3 r(0.0, 0.0, 0.0);
     int idx = faces[i*3+0]*3;
     Vector3 v0(verts[idx+0], verts[idx+1], verts[idx+2]);
     Vector3 c0(colors[idx+0], colors[idx+1], colors[idx+2]);
+    r[0] = rem[idx/3];
+
     idx = faces[i*3+1]*3;
     Vector3 v1(verts[idx+0], verts[idx+1], verts[idx+2]);
     Vector3 c1(colors[idx+0], colors[idx+1], colors[idx+2]);
+    r[1] = rem[idx/3];
+
     idx = faces[i*3+2]*3;
     Vector3 v2(verts[idx+0], verts[idx+1], verts[idx+2]);
     Vector3 c2(colors[idx+0], colors[idx+1], colors[idx+2]);
+    r[2] = rem[idx/3];
+
     // printf("v %f %f %f\n", v0[0], v0[1], v0[2]);
-    objects.push_back(new Triangle(v0, v1, v2, c0, c1, c2));
+    objects.push_back(new Triangle(v0, v1, v2, c0, c1, c2, r));
   }
 
   // Compute a BVH for this object set
@@ -64,7 +71,9 @@ void trace(float* rays, float* origin_in, float* verts, int* faces, int* colors,
       bool hit = bvh.getIntersection(ray, &I, false);
 
       if(hit) {
+        // No interpolation return always color of first index
         Vector3 colors = I.object->getColor(0);
+        float remission = I.object->getRemissions(0);
         Vector3 point = I.hit;
         endpoints[index+0] = point[0];
         endpoints[index+1] = point[1];
@@ -74,8 +83,10 @@ void trace(float* rays, float* origin_in, float* verts, int* faces, int* colors,
         endcolors[index+1] = colors.y;
         endcolors[index+2] = colors.z;
 
+        endrem[index/3] = remission;
+
         // Update range image
-        range[(width * j + i)] = I.t;
+        range[width * j + i] = I.t;
       }
     }
   }
@@ -105,9 +116,9 @@ void trace(float* rays, float* origin_in, float* verts, int* faces, int* colors,
 extern "C"
 {
   void ctrace(float* rays, float* origin, float* verts, int* faces, int* colors,
-              int n_rays, int n_verts, int n_faces, int height,
-              float* endpoints, int* endcolors, float* range) {
-    trace(rays, origin, verts, faces, colors, n_rays, n_verts, n_faces, height,
-          endpoints, endcolors, range);
+              float * rem, int n_rays, int n_verts, int n_faces, int height,
+              float* endpoints, int* endcolors, float* range, float * endrem) {
+    trace(rays, origin, verts, faces, colors, rem, n_rays, n_verts, n_faces, height,
+          endpoints, endcolors, range, endrem);
   }
 }

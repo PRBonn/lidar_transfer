@@ -17,6 +17,8 @@ struct Object {
 
   virtual Vector3 getColor(const int idx) const = 0;
 
+  virtual float getRemissions(const int idx) const = 0;
+
   //! Return a bounding box for this object
   virtual BBox getBBox() const = 0;
 
