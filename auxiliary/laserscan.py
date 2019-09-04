@@ -38,7 +38,7 @@ class LaserScan:
     self.proj_xyz = \
         np.full((self.proj_H, self.proj_W, 3), -1,
                 dtype=np.float32)           # [H,W,3] xyz coord (-1 is no data)
-    self.proj_remission = \
+    self.proj_remissions = \
         np.full((self.proj_H, self.proj_W), -1,
                 dtype=np.float32)           # [H,W] intensity (-1 is no data)
     self.proj_idx = \
@@ -220,7 +220,7 @@ class LaserScan:
     depth = depth[order]
     indices = indices[order]
     points = self.points[order]
-    remission = self.remissions[order]
+    remissions = self.remissions[order]
     proj_y = proj_y[order]
     proj_x = proj_x[order]
 
@@ -228,7 +228,7 @@ class LaserScan:
     self.depth = depth
     self.proj_range[proj_y, proj_x] = depth
     self.proj_xyz[proj_y, proj_x] = points
-    self.proj_remission[proj_y, proj_x] = remission
+    self.proj_remissions[proj_y, proj_x] = remissions
     self.proj_idx[proj_y, proj_x] = indices
     self.proj_x = proj_x
     self.proj_y = proj_y
@@ -310,6 +310,7 @@ class LaserScan:
     self.range_image = np.full((self.proj_H, self.proj_W), 0, dtype=np.float32)
     self.label_image = np.zeros((self.proj_H, self.proj_W, 1))
     self.label_color_image = np.zeros((self.proj_H, self.proj_W, 3))
+    self.proj_remissions = np.full((self.proj_H, self.proj_W, 1), -1, dtype=np.float32)
 
     if method == "depth":
       for i in range(len(proj_x)):  # iterate all points
@@ -321,6 +322,7 @@ class LaserScan:
           self.index[proj_y_i, proj_x_i] = i
           self.label_image[proj_y_i, proj_x_i] = self.label[i]
           self.label_color_image[proj_y_i, proj_x_i] = self.label_color[i]
+          self.proj_remissions[proj_y_i, proj_x_i] = self.remissions[i]
 
       self.proj_y = proj_y_cl[self.index]
       self.proj_x = proj_x_cl[self.index]
@@ -365,12 +367,12 @@ class LaserScan:
       depth2 = depth[order]
       indices = indices[order]
       points = self.points[order]
-      remission = self.remissions[order]
+      remissions = self.remissions[order]
       proj_y2 = proj_y_cl[order]
       proj_x2 = proj_x_cl[order]
       self.proj_range[proj_y2, proj_x2] = depth2
       self.proj_xyz[proj_y2, proj_x2] = points
-      self.proj_remission[proj_y2, proj_x2] = remission
+      self.proj_remissions[proj_y2, proj_x2] = remissions
       self.proj_idx[proj_y2, proj_x2] = indices
       self.proj_x2 = proj_x2
       self.proj_y2 = proj_y2
@@ -451,7 +453,7 @@ class LaserScan:
     self.unproj_range = torch.from_numpy(self.unproj_range).float()
     self.proj_xyz = torch.from_numpy(
         np.transpose(self.proj_xyz, (2, 0, 1))).float()
-    self.proj_remission = torch.from_numpy(self.proj_remission).float()
+    self.proj_remissions = torch.from_numpy(self.proj_remissions).float()
     self.proj_idx = torch.from_numpy(self.proj_idx).long()
     self.proj_mask = torch.from_numpy(self.proj_mask).float()
     # for projecting pointclouds into image
@@ -468,7 +470,7 @@ class LaserScan:
     self.unproj_range = self.unproj_range.cpu().numpy().astype(np.float32)
     self.proj_xyz = self.proj_xyz.cpu().numpy().astype(np.float32)
     self.proj_xyz = np.transpose(self.proj_xyz, (2, 0, 1))
-    self.proj_remission = self.proj_remission.cpu().numpy().astype(np.float32)
+    self.proj_remissions = self.proj_remission.cpu().numpy().astype(np.float32)
     self.proj_idx = self.proj_idx.cpu().numpy().astype(np.int32)
     self.proj_mask = self.proj_mask.cpu().numpy().astype(np.float32)
     self.proj_x = self.proj_x.cpu().numpy().astype(np.int32)
@@ -951,11 +953,13 @@ class MultiSemLaserScan():
     if self.adaption == 'cp':  # closest point
       back_points = self.merged.back_points.reshape(-1, 3)
       label_image = self.merged.label_image.reshape(-1)
+      remissions = self.merged.proj_remissions.reshape(-1)
 
       # TODO necessary?
       # Only write back_points which are valid (not black/unlabeled)
       index = self.merged.index.reshape(-1,) > 0
       back_points = back_points[index]
+      remissions = remissions[index]
       label_image = label_image[index].astype(np.int32)
     else:
     back_points = self.back_points.reshape(-1, 3)
@@ -963,19 +967,27 @@ class MultiSemLaserScan():
 
       index = label_image >= 0  # TODO there should be no -1
     back_points = back_points[index]
+    remissions = remissions[index]
     label_image = label_image[index].astype(np.int32)
       keep = np.sum(back_points, axis=1) != 0  # remove points with (0, 0, 0)
       back_points = back_points[keep]
+    remissions = remissions[keep]
       label_image = label_image[keep]
 
+    if self.adaption == 'cp':
+      assert(back_points.shape[0] == label_image.shape[0] == remissions.shape[0])
+    else:
     assert(back_points.shape[0] == label_image.shape[0])
 
     scan_file = open(
         os.path.join(out_dir, "velodyne", str(idx).zfill(6) + ".bin"), "wb")
-    for point in back_points:
+    for i, point in enumerate(back_points):
         # print(point[0], point[1], point[2])
-        # Set remissions to zero!
-        byte_values = struct.pack("ffff", point[0], point[1], point[2], 0.0)
+        r = 0.0
+        # Write remissions if using closest point
+        if self.adaption == 'cp':
+          r = remissions[i]
+        byte_values = struct.pack("ffff", point[0], point[1], point[2], r)
         scan_file.write(byte_values)
     scan_file.close()
 
@@ -987,12 +999,6 @@ class MultiSemLaserScan():
       byte_values = struct.pack("I", label)
       label_file.write(byte_values)
     label_file.close()
-
-    # TODO write mesh?
-
-    # TODO write range_image and label_image?
-    if range_image:
-      print("Write range image")
 
 
 def compare(scan_source, scan_target):
