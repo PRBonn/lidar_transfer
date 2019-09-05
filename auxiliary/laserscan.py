@@ -310,7 +310,7 @@ class LaserScan:
     self.range_image = np.full((self.proj_H, self.proj_W), 0, dtype=np.float32)
     self.label_image = np.zeros((self.proj_H, self.proj_W, 1))
     self.label_color_image = np.zeros((self.proj_H, self.proj_W, 3))
-    self.proj_remissions = np.full((self.proj_H, self.proj_W, 1), -1, dtype=np.float32)
+    self.proj_remissions = np.full((self.proj_H, self.proj_W), -1, dtype=np.float32)
 
     if method == "depth":
       for i in range(len(proj_x)):  # iterate all points
@@ -770,7 +770,16 @@ class MultiSemLaserScan():
       self.merged.do_label_projection_new()
       self.merged.do_reverse_projection_new(self.fov_up, self.fov_down,
                                             preserve_float=self.preserve_float)
-      self.merged
+
+      # Map from merged to self
+      self.back_points = self.merged.back_points
+      self.proj_range = self.merged.proj_range
+      self.proj_remissions = self.merged.proj_remissions
+      self.proj_color = self.merged.proj_color
+      self.label_image = self.merged.label_image
+      self.index = self.merged.index
+      self.label_color = self.merged.label_color_image.reshape(-1, 3)
+
         return [], [], []
 
     elif adaption == 'mesh':
@@ -880,7 +889,9 @@ class MultiSemLaserScan():
       t0_elapse = time.time()
       self.back_points, label_color, \
           verts, colors, faces, self.proj_range, self.proj_remissions = \
+          tsdf_vol.throw_rays_at_mesh(rays, origin, t_H, t_W,
                                       self.scans[0].color_lut)
+
       # proj_color    H x W x 3   [0,1]   -> colors for projected label image
       # label_color   back x 3    [0,1]   -> same as above, but same dim as points
       # label         H x W x 1   [0,259] -> label index for export
@@ -964,6 +975,7 @@ class MultiSemLaserScan():
     else:
     back_points = self.back_points.reshape(-1, 3)
     label_image = self.label_image.reshape(-1)
+      remissions = self.proj_remissions.reshape(-1)
 
       index = label_image >= 0  # TODO there should be no -1
     back_points = back_points[index]
@@ -983,11 +995,8 @@ class MultiSemLaserScan():
         os.path.join(out_dir, "velodyne", str(idx).zfill(6) + ".bin"), "wb")
     for i, point in enumerate(back_points):
         # print(point[0], point[1], point[2])
-        r = 0.0
-        # Write remissions if using closest point
-        if self.adaption == 'cp':
-          r = remissions[i]
-        byte_values = struct.pack("ffff", point[0], point[1], point[2], r)
+        byte_values = struct.pack("ffff", point[0], point[1], point[2],
+                                  remissions[i])
         scan_file.write(byte_values)
     scan_file.close()
 
