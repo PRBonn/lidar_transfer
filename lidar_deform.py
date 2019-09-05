@@ -305,7 +305,7 @@ if __name__ == '__main__':
     print("No beam angles in target config: calculate equidistant angles")
 
   # Approach parameter
-  adaption = CFG["adaption"]  # ['mesh', 'catmesh', 'cp']
+  adaption = CFG["adaption"]
   preserve_float = CFG["preserve_float"]
   voxel_size = CFG["voxel_size"]
   voxel_bounds = np.array(CFG["voxel_bounds"])
@@ -406,7 +406,7 @@ if __name__ == '__main__':
         label_diff, range_diff, rem_diff, m_iou, m_acc, MSE = \
             compare(scan, scans)
       if FLAGS.batch is False:
-          vis.set_diff2(label_diff, range_diff, rem_diff, m_iou, m_acc, MSE)
+          vis.set_diff(label_diff, range_diff, rem_diff, m_iou, m_acc, MSE)
     s = time.time() - t0_elapse
     print("Took: %.2fs" % (s))
 

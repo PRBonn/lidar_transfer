@@ -1011,6 +1011,8 @@ class MultiSemLaserScan():
 
 
 def compare(scan_source, scan_target):
+  """ Compare two scans by examine labels, range and remissions
+  """
   # Label intersection image
   source_color = scan_source.proj_color
   # source_label_map = scan_source.get_label_map()
