@@ -10,67 +10,6 @@ from auxiliary.laserscanvis import LaserScanVis
 from auxiliary.tools import convert_range
 
 
-def parse_calibration(filename):
-  """ read calibration file with given filename
-
-      Returns
-      -------
-      dict
-          Calibration matrices as 4x4 numpy arrays.
-  """
-  calib = {}
-
-  calib_file = open(filename)
-  for line in calib_file:
-    key, content = line.strip().split(":")
-    values = [float(v) for v in content.strip().split()]
-
-    pose = np.zeros((4, 4))
-    pose[0, 0:4] = values[0:4]
-    pose[1, 0:4] = values[4:8]
-    pose[2, 0:4] = values[8:12]
-    pose[3, 3] = 1.0
-
-    calib[key] = pose
-
-  calib_file.close()
-
-  return calib
-
-
-def parse_poses(filename, calibration):
-  """ read poses file with per-scan poses from given filename
-
-      Returns
-      -------
-      list
-          list of poses as 4x4 numpy arrays.
-  """
-  file = open(filename)
-
-  poses = []
-
-  Tr = calibration["Tr"]
-  Tr_inv = np.linalg.inv(Tr)
-
-  pose = np.eye(4)
-
-  i = 0
-  for line in file:
-    values = [float(v) for v in line.strip().split()]
-
-    cur_pose = np.zeros((4, 4))
-    cur_pose[0, 0:4] = values[0:4]
-    cur_pose[1, 0:4] = values[4:8]
-    cur_pose[2, 0:4] = values[8:12]
-    cur_pose[3, 3] = 1.0
-
-    pose = cur_pose
-    poses.append(np.matmul(Tr_inv, np.matmul(pose, Tr)))
-    i += 1
-
-  return poses
-
 if __name__ == '__main__':
   parser = argparse.ArgumentParser("./lidar_deform.py")
   parser.add_argument(
@@ -186,28 +125,6 @@ if __name__ == '__main__':
     print("Error opening config.yaml file %s." % scan_config_path)
     quit()
 
-  # read calib.txt of dataset
-  try:
-    calib_file = os.path.join(FLAGS.dataset, "sequences",
-                              FLAGS.sequence, "calib.txt")
-    print("Opening calibration file", calib_file)
-  except Exception as e:
-    print(e)
-    print("Error opening poses file.")
-    quit()
-  calib = parse_calibration(calib_file)
-
-  # read poses.txt of dataset
-  try:
-    poses_file = os.path.join(FLAGS.dataset, "sequences",
-                              FLAGS.sequence, "poses.txt")
-    print("Opening poses file", poses_file)
-  except Exception as e:
-    print(e)
-    print("Error opening poses file.")
-    quit()
-  poses = parse_poses(poses_file, calib)
-
   # additional parameter
   name = scan_config['name']
   # projection = scan_config['projection']
@@ -243,20 +160,17 @@ if __name__ == '__main__':
   nclasses = len(color_dict)
 
   # create a visualizer
+  show_label = not FLAGS.ignore_semantics
   show_diff = False
   show_mesh = False
-  show_range = False
+  show_range = True
+  show_remissions = True
+  show_target = False
   vis = LaserScanVis([W, W], [beams, beams], show_diff=show_diff,
-                     show_range=show_range, show_mesh=show_mesh)
+                     show_range=show_range, show_mesh=show_mesh,
+                     show_target=show_target, show_remissions=show_remissions,
+                     show_label=show_label)
   vis.nframes = len(scan_names)
-
-  if FLAGS.ignore_semantics:
-    vis.img_canvas.title = "Range image"
-    vis.test_canvas.title = "Label image"
-  else:
-    vis.img_canvas.title = "Label image"
-    vis.test_canvas.title = "Range image"
-  vis.grid_view.remove_widget(vis.back_view)
 
   # print instructions
   print("To navigate:")
@@ -266,32 +180,33 @@ if __name__ == '__main__':
 
   idx = FLAGS.offset
 
+  choice = "no"
   while True:
-    t0_elapse = time.time()
+    if choice != "change":
+      t0_elapse = time.time()
 
-    if FLAGS.ignore_semantics is False:
-      scan = SemLaserScan(beams, W, nclasses, color_dict)
-    else:
-      scan = LaserScan(beams, W)
+      if FLAGS.ignore_semantics is False:
+        scan = SemLaserScan(beams, W, nclasses, color_dict)
+      else:
+        scan = LaserScan(beams, W)
 
-    # open pointcloud
-    scan.open_scan(scan_names[idx], fov_up, fov_down)
-    if FLAGS.ignore_semantics is False:
-      scan.open_label(label_names[idx])
-      scan.colorize()
-      scan.remove_classes(ignore_classes)
-    scan.do_range_projection(fov_up, fov_down, remove=False)
-    if FLAGS.ignore_semantics is False:
-      scan.do_label_projection()
+      # open pointcloud
+      scan.open_scan(scan_names[idx], fov_up, fov_down)
+      if FLAGS.ignore_semantics is False:
+        scan.open_label(label_names[idx])
+        scan.colorize()
+        scan.remove_classes(ignore_classes)
+      scan.do_range_projection(fov_up, fov_down, remove=False)
+      if FLAGS.ignore_semantics is False:
+        scan.do_label_projection()
 
     # pass to visualizer!
     vis.frame = idx
     vis.set_title()
-    vis.set_laserscan(scan)
+    vis.set_source_scan(scan)
+    vis.set_source_3d(scan)
     if FLAGS.ignore_semantics is False:
       data = convert_range(scan.proj_range)
-      vis.test_vis.set_data(data)
-      vis.test_vis.update()
 
     # get user choice
     while True:
@@ -306,6 +221,8 @@ if __name__ == '__main__':
       idx -= 1
       if idx < 0:
         idx = len(scan_names) - 1
+      continue
+    elif choice == "change":
       continue
     elif choice == "quit":
       print()

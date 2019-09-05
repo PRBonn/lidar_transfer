@@ -1065,9 +1065,6 @@ def compare(scan_source, scan_target):
 
   # Range diff image
   source_range = scan_source.proj_range
-  if scan_target.adaption == 'cp':
-    target_range = scan_target.merged.proj_range
-  else:
     target_range = scan_target.proj_range
   # Mask out no data (= black) in target scan
   black = source_range == 0
@@ -1083,4 +1080,8 @@ def compare(scan_source, scan_target):
   MSE = range_diff.sum() / range_diff.size
   print("MSE: ", MSE)
   
-  return label_diff, range_diff, m_iou, m_acc, MSE
+  source_remissions = scan_source.proj_remissions
+  target_remissions = scan_target.proj_remissions
+  remissions_diff = (source_remissions - target_remissions) ** 2
+
+  return label_diff, range_diff, remissions_diff, m_iou, m_acc, MSE

@@ -11,13 +11,18 @@ from auxiliary.tools import get_mpl_colormap, convert_range
 class LaserScanVis():
   """Class that creates and handles a visualizer for a pointcloud"""
 
-  def __init__(self, W, H, show_mesh=False, show_diff=False, show_range=False):
+  def __init__(self, W, H, show_mesh=False, show_diff=False, show_range=False,
+               show_remissions=False, show_target=True, show_label=True):
     self.W = W
     self.H = H
-    self.show_mesh = show_mesh
-    self.point_size = 2
+    self.point_size = 3
     self.frame = 0
     self.nframes = 0
+    self.view_mode = 'label'
+    self.show_label = show_label
+    self.show_target = show_target
+    self.show_mesh = show_mesh
+    self.show_remissions = show_remissions
     self.show_diff = show_diff
     self.show_range = show_range
     self.reset()
@@ -28,7 +33,7 @@ class LaserScanVis():
     # safety critical, so let's do things wrong)
     self.action = "no"  # no, next, back, quit are the possibilities
 
-    # NEW canvas prepared for visualizing laserscan data
+    # 3D canvas
     self.scan_canvas = SceneCanvas(keys='interactive', show=True, title='',
                                    size=(1600, 600), bgcolor='white')
     self.scan_canvas.events.key_press.connect(self.key_press)
@@ -44,6 +49,7 @@ class LaserScanVis():
     self.grid_view.add_widget(self.scan_view, 0, 0)
 
     # target laserscan 3D
+    if self.show_target is True:
     self.back_view = vispy.scene.widgets.ViewBox(
       border_color='white', parent=self.scan_canvas.scene)
     self.back_vis = visuals.Markers()
@@ -55,64 +61,116 @@ class LaserScanVis():
 
     # self.grid_view.padding = 6
 
-    # NEW canvas for range img data 2D
-    self.img_canvas = SceneCanvas(keys='interactive', show=True,
-                                  title='Original Label Image',
-                                  size=(self.W[0], self.H[0]))
-    self.img_canvas.events.key_press.connect(self.key_press)
-    self.img_view = self.img_canvas.central_widget.add_view()
+    h = 1
+    if self.show_range is True:
+      h += 1
+    if self.show_remissions is True:
+      h += 1
+
+    # source canvas 2D
+    source_canvas_title = 'Source ' + str(self.H[0]) + 'x' + str(self.W[0])
+    self.source_canvas = SceneCanvas(keys='interactive', show=True,
+                                     title=source_canvas_title,
+                                     size=(self.W[0], h * self.H[0]))
+    self.source_canvas.events.key_press.connect(self.key_press)
+    self.source_view = self.source_canvas.central_widget.add_grid()
+    source_grid_idx = 0
+
+    # Add label image
+    if self.show_label:
+      self.img_view = vispy.scene.widgets.ViewBox(
+          border_color='white', parent=self.source_canvas.scene)
     self.img_vis = visuals.Image(cmap='viridis')
     self.img_view.add(self.img_vis)
+      self.source_view.add_widget(self.img_view, source_grid_idx, 0)
+      source_grid_idx += 1
 
-    # NEW test canvas 2D
-    self.test_canvas = SceneCanvas(keys='interactive', show=True,
-                                   title='Test Label Image',
-                                   size=(self.W[1], self.H[1]))
-    self.test_canvas.events.key_press.connect(self.key_press)
-    self.test_view = self.test_canvas.central_widget.add_view()
+    # target canvas 2D
+    if self.show_target:
+      target_canvas_title = 'Target ' + str(self.H[1]) + 'x' + str(self.W[1])
+      self.target_canvas = SceneCanvas(keys='interactive', show=True,
+                                       title=target_canvas_title,
+                                       size=(self.W[1], h * self.H[1]))
+      self.target_canvas.events.key_press.connect(self.key_press)
+      self.target_view = self.target_canvas.central_widget.add_grid()
+      target_grid_idx = 0
+
+      # Add label image
+      if self.show_label:
+        self.test_view = vispy.scene.widgets.ViewBox(
+            border_color='white', parent=self.target_canvas.scene)
     self.test_vis = visuals.Image(cmap='viridis')
     self.test_view.add(self.test_vis)
+        self.target_view.add_widget(self.test_view, target_grid_idx, 0)
+        target_grid_idx += 1
 
     if self.show_range:
-      self.range_canvas = SceneCanvas(keys='interactive', show=True,
-                                      title='Range Image',
-                                      size=(self.W[1], self.H[1] * 2))
-      self.range_canvas.events.key_press.connect(self.key_press)
-      self.range_view = self.range_canvas.central_widget.add_grid()
-
       self.range_view_source = vispy.scene.widgets.ViewBox(
-          border_color='white', parent=self.range_canvas.scene)
+          border_color='white', parent=self.source_canvas.scene)
       # self.range_image_source = visuals.Image(cmap='viridis')
       self.range_image_source = visuals.Image()
       self.range_view_source.add(self.range_image_source)
-      self.range_view.add_widget(self.range_view_source, 0, 0)
+      self.source_view.add_widget(self.range_view_source, source_grid_idx, 0)
+      source_grid_idx += 1
 
+      if self.show_target:
       self.range_view_target = vispy.scene.widgets.ViewBox(
-          border_color='white', parent=self.range_canvas.scene)
+            border_color='white', parent=self.target_canvas.scene)
       self.range_image_target = visuals.Image(cmap='viridis')
       self.range_view_target.add(self.range_image_target)
-      self.range_view.add_widget(self.range_view_target, 1, 0)
+        self.target_view.add_widget(self.range_view_target, target_grid_idx, 0)
+        target_grid_idx += 1
+
+    if self.show_remissions:
+      self.remissions_view_source = vispy.scene.widgets.ViewBox(
+          border_color='white', parent=self.source_canvas.scene)
+      # self.remissions_image_source = visuals.Image(cmap='viridis')
+      self.remissions_image_source = visuals.Image()
+      self.remissions_view_source.add(self.remissions_image_source)
+      self.source_view.add_widget(self.remissions_view_source, source_grid_idx, 0)
+      source_grid_idx += 1
+
+      if self.show_target:
+        self.remissions_view_target = vispy.scene.widgets.ViewBox(
+            border_color='white', parent=self.target_canvas.scene)
+        self.remissions_image_target = visuals.Image(cmap='viridis')
+        self.remissions_view_target.add(self.remissions_image_target)
+        self.target_view.add_widget(self.remissions_view_target, target_grid_idx, 0)
+        target_grid_idx += 1
 
     # NEW canvas for showing difference in range and labels
     if self.show_diff:
     self.diff_canvas = SceneCanvas(keys='interactive', show=True,
                                    title='Difference Range Image',
-                                     size=(self.W[1], self.H[1] * 2))
+                                     size=(self.W[1], self.H[1] * h))
     self.diff_canvas.events.key_press.connect(self.key_press)
     self.diff_view = self.diff_canvas.central_widget.add_grid()
+      grid_idx = 0
 
+      self.diff_view_label = vispy.scene.widgets.ViewBox(
+          border_color='white', parent=self.diff_canvas.scene)
+      self.diff_image_label = visuals.Image(cmap='viridis')
+      self.diff_view_label.add(self.diff_image_label)
+      self.diff_view.add_widget(self.diff_view_label, grid_idx, 0)
+      grid_idx += 1
+
+      if self.show_range:
     self.diff_view_depth = vispy.scene.widgets.ViewBox(
       border_color='white', parent=self.diff_canvas.scene)
     # self.diff_image_depth = visuals.Image(cmap='viridis')
     self.diff_image_depth = visuals.Image()
     self.diff_view_depth.add(self.diff_image_depth)
-    self.diff_view.add_widget(self.diff_view_depth, 0, 0)
+        self.diff_view.add_widget(self.diff_view_depth, grid_idx, 0)
+        grid_idx += 1
 
-    self.diff_view_label = vispy.scene.widgets.ViewBox(
+      if self.show_remissions:
+        self.diff_view_remissions = vispy.scene.widgets.ViewBox(
       border_color='white', parent=self.diff_canvas.scene)
-    self.diff_image_label = visuals.Image(cmap='viridis')
-    self.diff_view_label.add(self.diff_image_label)
-    self.diff_view.add_widget(self.diff_view_label, 1, 0)
+        # self.diff_image_remissions = visuals.Image(cmap='viridis')
+        self.diff_image_remissions = visuals.Image()
+        self.diff_view_remissions.add(self.diff_image_remissions)
+        self.diff_view.add_widget(self.diff_view_remissions, grid_idx, 0)
+        grid_idx += 1
 
     if self.show_mesh:
       self.mesh_view = vispy.scene.widgets.ViewBox(
@@ -194,40 +252,77 @@ class LaserScanVis():
   def set_title(self):
     self.scan_canvas.title = 'Frame %d of %d' % (self.frame + 1, self.nframes)
 
+  def set_source_scan(self, scan):
+    """ Set single raw scan
+    """
+    # plot 2D images
+    if self.show_label:
+      self.img_vis.set_data(scan.proj_color[..., ::-1])
+    if self.show_range:
+      data = convert_range(scan.proj_range)
+      self.range_image_source.set_data(data)
+    if self.show_remissions:
+      # data = convert_range(scan.proj_remissions)
+      data = scan.proj_remissions
+      self.remissions_image_source.set_data(data)
+    self.img_vis.update()
+
   def set_data(self, scan_source, scan_target, verts=None, verts_colors=None,
                faces=None, W=None, H=None):
     self.set_title()
-    if self.show_diff:
-      # TODO
-      pass
+
+    if self.show_target:
+      self.set_target_3d(scan_target)
+
+    if self.show_label:
+      self.img_vis.set_data(scan_source.proj_color[..., ::-1])
+      if self.show_target:
+        self.test_vis.set_data(scan_target.proj_color[..., ::-1])
+
     if self.show_range:
       source_data = scan_source.proj_range
+      # print("source", source_data.max(), source_data.min(), source_data[source_data>=0].mean())
       # source_data = self.convert_ranges(scan_source.proj_range)
-      if scan_target.adaption == 'cp':
-        target_range = scan_target.merged.proj_range
-      else:
-        target_range = scan_target.proj_range
-      # target_data = self.convert_range(target_range)
-      target_data = target_range
-
       self.range_image_source.set_data(source_data)
       self.range_image_source.update()
+      if self.show_target:
+        target_range = scan_target.proj_range
+      # target_data = self.convert_range(target_range)
+        # print("target", target_data.max(), target_data.min(), target_data.mean())
+      target_data = target_range
       self.range_image_target.set_data(target_data)
       self.range_image_target.update()
+
+    if self.show_remissions:
+      source_data = scan_source.proj_remissions
+      self.remissions_image_source.set_data(source_data)
+      self.remissions_image_source.update()
+      if self.show_target:
+        target_data = scan_target.proj_remissions
+        self.remissions_image_target.set_data(target_data)
+        self.remissions_image_target.update()
+
     if self.show_mesh:
       self.mesh_vis.set_data(vertices=verts,
                              vertex_colors=verts_colors[..., ::-1],
                              faces=faces)
       self.mesh_vis.update()
 
-  def set_diff2(self, label_diff, range_diff, m_iou, m_acc, MSE):
+  def set_diff2(self, label_diff, range_diff, remissions_diff, m_iou, m_acc,
+                MSE):
+    if self.show_label:
     self.diff_image_label.set_data(label_diff[..., ::-1])
     self.diff_image_label.update()
 
+    if self.show_range:
     data = convert_range(range_diff)
     self.diff_image_depth.set_data(data)
     self.diff_image_depth.set_data(range_diff)
     self.diff_image_depth.update()
+
+    if self.show_remissions:
+      self.diff_image_remissions.set_data(remissions_diff)
+      self.diff_image_remissions.update()
 
     self.diff_canvas.title = \
         'IoU %5.2f%%, Acc %5.2f%%, MSE %f' % (m_iou * 100.0, m_acc * 100, MSE)
@@ -275,9 +370,6 @@ class LaserScanVis():
 
     # Range diff image
     source_range = scan_source.proj_range
-    if scan_target.adaption == 'cp':
-      target_range = scan_target.merged.proj_range
-    else:
       target_range = scan_target.proj_range
     # Mask out no data (= black) in target scan
     black = source_range == 0
@@ -293,7 +385,7 @@ class LaserScanVis():
     range_diff = (source_range - target_range) ** 2
 
     data = convert_range(range_diff)
-    self.diff_image_depth.set_data(data)
+    # self.diff_image_depth.set_data(data)
     self.diff_image_depth.set_data(range_diff)
     self.diff_image_depth.update()
 
@@ -325,6 +417,57 @@ class LaserScanVis():
     self.test_vis.set_data(colors.reshape(H, W, 3)[..., ::-1])
     self.test_vis.update()
 
+
+  def set_source_3d(self, scan_source):
+    points = scan_source.points
+
+    if self.view_mode == 'label':
+      colors = scan_source.label_color
+    else:
+      if self.view_mode == 'range':
+        range_data = np.copy(scan_source.unproj_range.reshape(-1))
+        power = 2
+        range_data = range_data**(1 / power)
+        viridis_range = ((range_data - range_data.min()) /
+                         (range_data.max() - range_data.min()) *
+                         255).astype(np.uint8)
+      elif self.view_mode == 'rem':
+        range_data = np.copy(scan_source.remissions.reshape(-1))
+        viridis_range = (range_data * 255 ).astype(np.uint8)
+      viridis_map = get_mpl_colormap("viridis")
+      colors = viridis_map[viridis_range]
+
+    self.scan_vis.set_data(points,
+                           face_color=colors[..., ::-1],
+                           edge_color=colors[..., ::-1],
+                           size=self.point_size)
+    self.scan_vis.update()
+
+  def set_target_3d(self, scan_target):
+    points = scan_target.back_points
+
+    if self.view_mode == 'label':
+      colors = scan_target.label_color
+    else:
+      if self.view_mode == 'range':
+        range_data = np.copy(scan_target.proj_range.reshape(-1))
+        power = 2
+        range_data = range_data**(1 / power)
+        viridis_range = ((range_data - range_data.min()) /
+                         (range_data.max() - range_data.min()) *
+                         255).astype(np.uint8)
+      elif self.view_mode == 'rem':
+        range_data = np.copy(scan_target.proj_remissions.reshape(-1))
+        viridis_range = (range_data * 255 ).astype(np.uint8)
+      viridis_map = get_mpl_colormap("viridis")
+      colors = viridis_map[viridis_range]
+
+    self.back_vis.set_data(points,
+                           face_color=colors[..., ::-1],
+                           edge_color=colors[..., ::-1],
+                           size=self.point_size)
+    self.back_vis.update()
+
   # interface
   def key_press(self, event):
     if event.key == 'N':
@@ -334,6 +477,15 @@ class LaserScanVis():
     elif event.key == 'Q' or event.key == 'Escape':
       self.destroy()
       self.action = 'quit'
+    elif event.key == '1':
+      self.action = 'change'
+      self.view_mode = 'label'
+    elif event.key == '2':
+      self.action = 'change'
+      self.view_mode = 'range'
+    elif event.key == '3':
+      self.action = 'change'
+      self.view_mode = 'rem'
 
   def get_action(self, timeout=0):
     # return action and void it to avoid reentry
@@ -344,10 +496,12 @@ class LaserScanVis():
 
   def destroy(self):
     # destroy the visualization
-    self.scan_canvas.events.key_press.disconnect()
-    self.scan_canvas.close()
-    self.img_canvas.events.key_press.disconnect()
-    self.img_canvas.close()
-    self.test_canvas.events.key_press.disconnect()
-    self.test_canvas.close()
+    self.source_canvas.events.key_press.disconnect()
+    self.source_canvas.close()
+    if self.show_target:
+      self.target_canvas.events.key_press.disconnect()
+      self.target_canvas.close()
+    if self.show_diff:
+      self.diff_canvas.events.key_press.disconnect()
+      self.diff_canvas.close()
     vispy.app.quit()
