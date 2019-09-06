@@ -3,9 +3,10 @@ transformation: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
 adaption: 'mergemesh'
 number_of_scans: 1
 preserve_float: True
+voxel_size: 0.05
 batch_interval: 10
 #              xmin xmax ymin ymax zmin zmax
-voxel_bounds: [ -50,  50, -50,  50,  -3,   2]
+voxel_bounds: [ -50,  50, -50,  50,  -5,   5]
 ignore: [0, 1]
 moving: [252, 253, 254, 255, 256, 257, 258, 259]
 labels: 
