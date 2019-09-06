@@ -3,6 +3,8 @@ output
 auxiliary/raytracer/.nfs0*
 *.ppm
 auxiliary/raytracer/RayTracerCython.cpp
+auxiliary/raytracer/RayTracerCython.c
+*.ply
 *.pdf
 *.svg
 *.png
@@ -165,4 +167,3 @@ dmypy.json
 .pyre/
 
 # End of https://www.gitignore.io/api/macos,python
-auxiliary/raytracer/RayTracerCython.c
