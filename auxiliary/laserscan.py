@@ -140,6 +140,9 @@ class LaserScan:
     # self.do_range_projection(fov_up, fov_down)
 
   def remove_points(self, keep_index):
+    """ Remove points by passing a boolean index of those to keep and 
+        removes all others.
+    """
     self.points = self.points[keep_index]
     self.remissions = self.remissions[keep_index]
     # TODO Merge classes to avoid this??
@@ -147,6 +150,53 @@ class LaserScan:
     self.label_color = self.label_color[keep_index]
 
     # TODO add pinhole projection?
+
+  def create_restricted_dataset(self, fov_up, fov_down,
+                                fov_up_lim, fov_down_lim, idx, out_dir):
+    """ Project a pointcloud into a spherical projection image.projection.
+        Function takes two arguments.
+    """
+    # laser parameters
+    fov_up_lim = fov_up_lim / 180.0 * np.pi      # field of view up in radians
+    fov_down_lim = fov_down_lim / 180.0 * np.pi  # field of view down in radians
+
+    # get depth of all points
+    depth = np.linalg.norm(self.points, 2, axis=1)
+
+    # get angles of all points
+    pitch = np.arcsin(self.points[:, 2] / depth)
+
+    # Discard all pitch values outside of frustrum
+    valid = np.bitwise_and(pitch <= fov_up_lim / 180.0 * np.pi,
+                           pitch >= fov_down_lim / 180.0 * np.pi)
+  
+    # Copy subset of valid points only
+    points = np.copy(self.points[valid])
+    remissions = np.copy(self.remissions[valid]).reshape(-1)
+    label_image = np.copy(self.label[valid]).reshape(-1)
+
+    print("Remove: ", 100 - int(np.sum(valid) / valid.size * 100), "%,",
+          valid.size - np.sum(valid), "of", valid.size, "points")
+  
+    # save points + remissions
+    scan_file = open(
+        os.path.join(out_dir, "velodyne", str(idx).zfill(6) + ".bin"), "wb")
+    for i, point in enumerate(points):
+        # print(point[0], point[1], point[2])
+        byte_values = struct.pack("ffff", point[0], point[1], point[2],
+                                  remissions[i])
+        scan_file.write(byte_values)
+    scan_file.close()
+
+    # write labels
+    label_file = open(
+        os.path.join(out_dir, "labels", str(idx).zfill(6) + ".label"), "wb")
+    for label in label_image:
+      # print(label.dtype, label.shape, label.astype(np.int32))
+      byte_values = struct.pack("I", label)
+      label_file.write(byte_values)
+    label_file.close()
+
   def do_range_projection(self, fov_up, fov_down, remove=False):
     """ Project a pointcloud into a spherical projection image.projection.
         Function takes two arguments.
