@@ -39,6 +39,8 @@ class TSDFVolume(object):
     print("Voxel count: %d mio"%(self._vol_dim[0]*self._vol_dim[1]*self._vol_dim[2]/1E6))
     print("Voxel size: %f"%(self._voxel_size))
 
+    # TODO Use larger voxel volume / higher voxel resolution by spliting and passing half/quarter of the voxel to the gpu memory
+
     # Initialize pointers to voxel volume in CPU memory
     self._tsdf_vol_cpu = np.ones(self._vol_dim).astype(np.float32)
     # for computing the cumulative moving average of observations per voxel
@@ -79,7 +81,7 @@ class TSDFVolume(object):
           int max_threads_per_block = blockDim.x;
           int block_idx = blockIdx.z*gridDim.y*gridDim.x+blockIdx.y*gridDim.x+blockIdx.x;
           int voxel_idx = gpu_loop_idx*gridDim.x*gridDim.y*gridDim.z*max_threads_per_block+block_idx*max_threads_per_block+threadIdx.x;
-          
+
           int vol_dim_x = (int) vol_dim[0];
           int vol_dim_y = (int) vol_dim[1];
           int vol_dim_z = (int) vol_dim[2];
@@ -170,6 +172,8 @@ class TSDFVolume(object):
           float new_b = floorf(new_color/(256*256));
           float new_g = floorf((new_color-new_b*256*256)/256);
           float new_r = new_color-new_b*256*256-new_g*256;
+
+          // Color interpolation
           new_b = fmin(roundf((old_b*w_old+new_b)/w_new),255.0f);
           new_g = fmin(roundf((old_g*w_old+new_g)/w_new),255.0f);
           new_r = fmin(roundf((old_r*w_old+new_r)/w_new),255.0f);
@@ -209,18 +213,18 @@ class TSDFVolume(object):
     if FUSION_GPU_MODE:
       for gpu_loop_idx in range(self._n_gpu_loops):
         self._cuda_integrate(self._tsdf_vol_gpu,
-                              self._weight_vol_gpu,
-                              self._color_vol_gpu,
+                             self._weight_vol_gpu,
+                             self._color_vol_gpu,
                              self._rem_vol_gpu,
-                              cuda.InOut(self._vol_dim.astype(np.float32)),
-                              cuda.InOut(self._vol_origin.astype(np.float32)),
-                              cuda.InOut(cam_pose.reshape(-1).astype(np.float32)),
-                              cuda.InOut(np.asarray([gpu_loop_idx,self._voxel_size,im_h,im_w,self._trunc_margin,obs_weight,self.fov_up,self.fov_down],np.float32)),
-                              cuda.InOut(color_im.reshape(-1).astype(np.float32)),
-                              cuda.InOut(depth_im.reshape(-1).astype(np.float32)),
+                             cuda.InOut(self._vol_dim.astype(np.float32)),
+                             cuda.InOut(self._vol_origin.astype(np.float32)),
+                             cuda.InOut(cam_pose.reshape(-1).astype(np.float32)),
+                             cuda.InOut(np.asarray([gpu_loop_idx,self._voxel_size,im_h,im_w,self._trunc_margin,obs_weight,self.fov_up,self.fov_down],np.float32)),
+                             cuda.InOut(color_im.reshape(-1).astype(np.float32)),
+                             cuda.InOut(depth_im.reshape(-1).astype(np.float32)),
                              cuda.InOut(rem_im.reshape(-1).astype(np.float32)),
-                              block=(self._max_gpu_threads_per_block,1,1),
-                              grid=(int(self._max_gpu_grid_dim[0]),int(self._max_gpu_grid_dim[1]),int(self._max_gpu_grid_dim[2])))
+                             block=(self._max_gpu_threads_per_block,1,1),
+                             grid=(int(self._max_gpu_grid_dim[0]),int(self._max_gpu_grid_dim[1]),int(self._max_gpu_grid_dim[2])))
 
     # CPU mode: integrate voxel volume (vectorized implementation)
     else:
@@ -270,7 +274,7 @@ class TSDFVolume(object):
                   np.logical_and(pix_y >= 0,
                   np.logical_and(pix_y < im_h,
                   np.logical_and(pitch < fov_up,
-                                  pitch > fov_down)))))
+                                 pitch > fov_down)))))
 
       depth_val = np.zeros(pix_x.shape)
       depth_val[valid_pix] = depth_im[pix_y[valid_pix],pix_x[valid_pix]]
@@ -318,7 +322,7 @@ class TSDFVolume(object):
     # Marching cubes
     verts, faces, norms, vals = measure.marching_cubes_lewiner(tsdf_vol, level=0)
     verts_ind = np.round(verts).astype(int)
-
+    
     # voxel grid coordinates to world coordinates
     verts = verts*self._voxel_size+self._vol_origin
 
@@ -338,6 +342,8 @@ class TSDFVolume(object):
     print("Get mesh by marching cubes...")
     verts, faces, norms, colors, rem = self.get_mesh(color_lut)
 
+    # TODO Expose parameter to write mesh
+    # meshwrite("test.ply",verts,faces,norms,colors)
 
     # Arrays must be contiguous and 1D
     verts_c = np.ascontiguousarray(verts.reshape(-1))

@@ -19,6 +19,10 @@ Transfer semantic KITTI labeles into other dataset/sensor formats.
 - [x] Visualize
 - [ ] Deformed
     - [x] Closest point
-    - [ ] Mesh
-    - [ ] Categorie mesh
+    - [x] Mesh
     - [x] use aggregated point cloud
+
+## Uses
+Brandon Pelfrey https://github.com/brandonpelfrey/Fast-BVH
+Andy Zeng https://github.com/andyzeng/tsdf-fusion-python
+Visualisation http://vispy.org/

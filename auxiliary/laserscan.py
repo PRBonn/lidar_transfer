@@ -4,6 +4,8 @@ import os
 import struct
 import time
 import torch
+import copy
+import imageio
 import auxiliary.fusion_lidar as fl
 from auxiliary.np_ioueval import iouEval
 from auxiliary.tools import get_mpl_colormap, convert_range
@@ -74,7 +76,7 @@ class LaserScan:
     hom_points = np.ones((scan.shape[0], 4))
     hom_points[:, 0:3] = scan[:, 0:3]
     t_points = np.matmul(pose, hom_points.T)
-    
+
     # Apply given transformation to move sensor to specific position/angle
     t_points = np.matmul(self.transformation, t_points).T
 
@@ -162,10 +164,14 @@ class LaserScan:
       depth = depth[keep_index]
       self.remove_points(keep_index)
 
+    # TODO expose parameter to limit by depth
+    # depth_50 = depth < 50
+    # depth = depth[depth_50]
+
     # get scan components
-    scan_x = self.points[:, 0]
-    scan_y = self.points[:, 1]
-    scan_z = self.points[:, 2]
+    scan_x = self.points[:, 0]  # [depth_50]
+    scan_y = self.points[:, 1]  # [depth_50]
+    scan_z = self.points[:, 2]  # [depth_50]
 
     # get angles of all points
     yaw = -np.arctan2(scan_y, scan_x)
@@ -182,7 +188,7 @@ class LaserScan:
     # get projections in image coords
     proj_x = 0.5 * (yaw / np.pi + 1.0)            # in [0.0, 1.0]
     proj_y = 1.0 - (pitch + abs(fov_down)) / fov  # in [0.0, 1.0]
-    
+
     # remove non-valid points
     if remove:
       min_value = np.argmin(proj_y)
@@ -210,8 +216,7 @@ class LaserScan:
     proj_y = np.minimum(self.proj_H - 1, proj_y)
     proj_y = np.maximum(0, proj_y).astype(np.int32)   # in [0,H-1]
     self.proj_y = np.copy(proj_y)  # store a copy in original order
-    # copy of depth in original order
-    self.unproj_range = np.copy(depth)
+    self.unproj_range = np.copy(depth)  # copy of depth in original order
 
     # indices of original points sorted by depth
     indices = np.arange(depth.shape[0])
@@ -233,7 +238,6 @@ class LaserScan:
     self.proj_x = proj_x
     self.proj_y = proj_y
     self.proj_mask = (self.proj_idx > 0).astype(np.float32)
-    # print(self.proj_range.shape)
 
   def do_range_projection_new(self, fov_up, fov_down, remove=False,
                               method="depth"):
@@ -273,7 +277,7 @@ class LaserScan:
     # get projections in image coords
     proj_x = 0.5 * (yaw / np.pi + 1.0)            # in [0.0, 1.0]
     proj_y = 1.0 - (pitch + abs(fov_down)) / fov  # in [0.0, 1.0]
-    
+
     # remove non-valid points
     if remove:
       min_value = np.argmin(proj_y)
@@ -310,7 +314,8 @@ class LaserScan:
     self.range_image = np.full((self.proj_H, self.proj_W), 0, dtype=np.float32)
     self.label_image = np.zeros((self.proj_H, self.proj_W, 1))
     self.label_color_image = np.zeros((self.proj_H, self.proj_W, 3))
-    self.proj_remissions = np.full((self.proj_H, self.proj_W), -1, dtype=np.float32)
+    self.proj_remissions = np.full((self.proj_H, self.proj_W), -1,
+                                   dtype=np.float32)
 
     if method == "depth":
       for i in range(len(proj_x)):  # iterate all points
@@ -560,7 +565,7 @@ class SemLaserScan(LaserScan):
       self.label = label
     else:
       self.label = np.concatenate((self.label, label))
-    
+
     # if self.project:
       # self.do_label_projection()
 
@@ -701,7 +706,7 @@ class MultiSemLaserScan():
     """ Open multiple raw scan and fill in attributes
     """
     self.reset()
-      
+
     if self.nscans > 1:
       # use also previous scans
       number_of_prev_scans = self.nscans // 2
@@ -723,13 +728,13 @@ class MultiSemLaserScan():
         scan.colorize()
         scan.apply_pose()
 
-          # remove moving classes from all but primary scan
+        # remove moving classes from all but primary scan
         if i != 0:
           scan.remove_classes(self.moving_classes)
 
         # remove class unlabeled (0), outlier (1)
         scan.remove_classes(self.ignore_classes)
-        
+
     else:  # use a single scan
       self.scans[0].open_scan(scan_names[idx], self.fov_up, self.fov_down)
       self.scans[0].open_label(label_names[idx])
@@ -746,6 +751,7 @@ class MultiSemLaserScan():
     # assert(self.scan_idx.shape[0] == self.points.shape[0])
     # assert(self.label.shape[0] == self.points.shape[0])
     self.adaption = adaption
+    # print(self.transformation)
     # different approaches for point cloud adaption
     if adaption == 'cp':  # closest point
       self.merged = SemLaserScan(self.H, self.W, self.nclasses,
@@ -753,7 +759,7 @@ class MultiSemLaserScan():
                                  self.beam_angles)
       self.merged.reset()
       self.merged.pose = poses[idx]
-      
+
       # Merge scans into a single scan
       for scan in self.scans:
         self.merged.points = np.concatenate((self.merged.points, scan.points))
@@ -780,7 +786,7 @@ class MultiSemLaserScan():
       self.index = self.merged.index
       self.label_color = self.merged.label_color_image.reshape(-1, 3)
 
-        return [], [], []
+      return [], [], []
 
     elif adaption == 'mesh':
       vol_bnds = self.vol_bnds
@@ -789,11 +795,9 @@ class MultiSemLaserScan():
         vol_bnds = np.zeros((3, 2), dtype=np.int32)
         for scan in self.scans:
           bnds = scan.get_bnds()
-          vol_bnds = np.concatenate((np.minimum(bnds[:, 0],
-                                                vol_bnds[:, 0]).reshape(3, 1),
-                                     np.maximum(bnds[:, 1],
-                                                vol_bnds[:, 1]).reshape(3, 1)),
-                                     axis=1)
+          vol_bnds = np.concatenate(
+              (np.minimum(bnds[:, 0], vol_bnds[:, 0]).reshape(3, 1),
+               np.maximum(bnds[:, 1], vol_bnds[:, 1]).reshape(3, 1)), axis=1)
         print(vol_bnds)
       t0_elapse = time.time()
       for i, scan in enumerate(self.scans):
@@ -842,12 +846,13 @@ class MultiSemLaserScan():
 
     # Adapt mesh from merged scans
     elif adaption == 'mergemesh':
+      # TODO ? use source parameter for range image creation, but for raytracing the target one
       self.merged = SemLaserScan(self.H, self.W, self.nclasses,
                                  self.color_dict, self.transformation,
                                  self.beam_angles)
       self.merged.reset()
       self.merged.pose = poses[idx]
-      
+
       # Merge scans into a single scan
       for scan in self.scans:
         self.merged.points = np.concatenate((self.merged.points, scan.points))
@@ -856,13 +861,20 @@ class MultiSemLaserScan():
         self.merged.label = np.concatenate((self.merged.label, scan.label))
         self.merged.label_color = np.concatenate((self.merged.label_color,
                                                   scan.label_color))
-
+      print(np.amax(self.merged.points, axis=0))
+      print(np.amin(self.merged.points, axis=0))
       # After accumulating all scans undo the pose and do range projection
       self.merged.apply_inv_pose()
+
+      # TODO maybe apply here transformation or inverse trafo for different sensor position
+      print(self.fov_down, self.fov_up)
+
       self.merged.do_range_projection_new(self.fov_up, self.fov_down,
                                           remove=True)
       self.merged.do_label_projection_new()
 
+      print("Merged proj H", self.merged.proj_H)
+      print("self H", self.H)
 
       # Get voxel bounds by examining the complete point cloud
       merged_bnds = np.rint(self.merged.get_bnds()).astype(int)
@@ -882,10 +894,18 @@ class MultiSemLaserScan():
       tsdf_vol.integrate(proj_label3, self.merged.proj_range,
                          self.merged.proj_remissions, np.eye(3), obs_weight=1.)
       fps = 1.0 / (time.time() - t0_elapse)
-      print("Average FPS: %.2f" % (fps))
+      # print("Average FPS: %.2f" % (fps))
 
-      rays = self.create_rays()
+      # TODO use now target settings?
+      t_H = int(self.H)
+      t_W = int(self.W)
+      print("target dim:", t_H, t_W)
+      rays = self.create_rays(self.fov_up, self.fov_down, self.H, self.W)
+      # rays, origin = self.create_rays_moving(self.fov_up, self.fov_down, self.H, self.W)
+      # TODO expose origin or use given translation to use as origin
       origin = np.array([0, 0, 0]).astype(np.float32)
+      # origin = np.array([0, 0, 0.5]).astype(np.float32)
+      print("Origin:", origin)
       t0_elapse = time.time()
       self.back_points, label_color, \
           verts, colors, faces, self.proj_range, self.proj_remissions = \
@@ -928,8 +948,7 @@ class MultiSemLaserScan():
       i += 1  # encode label as sequential number
     return label_map
 
-  def create_rays(self, fov_up, fov_down, H, W):
-    beams = []
+  def create_rays_moving(self, fov_up, fov_down, H, W):
 
     # TODO pass parameter for rays
 
@@ -937,7 +956,60 @@ class MultiSemLaserScan():
 
     # TODO Option to add noise to angle values
 
-    # TODO Adapt speed from poses to reflect rolling shutter in rays
+    # NOT WORKING Adapt speed from poses to reflect rolling shutter in rays
+
+    beams = np.zeros((H, W, 3)).astype(np.float32)
+    origin = np.zeros((H, W, 3)).astype(np.float32)
+    origin_final = np.array([0, 1, 0]).astype(np.float32)
+    # correct initial rotation of sensor
+    initial = 180
+    yaw_angles = (np.linspace(0, 360, W) + initial)
+    larger = yaw_angles > 360
+    yaw_angles[larger] -= 360
+    yaw_angles = yaw_angles / 180. * np.pi
+    pitch = np.linspace(fov_up, fov_down, H) / 180. * np.pi
+    pitch = np.pi / 2 - pitch
+    # point_z = np.cos(pitch)  #* np.ones(yaw.shape)
+    # point_z = point_z.reshape(H, 1)
+    distortion = np.eye(4)
+    delay = 0
+    for w, yaw in enumerate(yaw_angles):
+      for h, p in enumerate(pitch):
+        # point_x = np.sin(p) * np.cos(-yaw)
+        # point_y = np.sin(p) * np.sin(-yaw)
+        # point_z = np.cos(pitch)
+        # point_x = point_x.reshape(H, 1)
+        # point_y = point_y.reshape(H, 1)
+        # single_column = np.concatenate((point_x, point_y, point_z,
+        #                                 np.ones((H, 1))), axis=1)
+        point = np.array([np.sin(p) * np.cos(-yaw),
+                          np.sin(p) * np.sin(-yaw),
+                          np.cos(p), 1.0]).astype(np.float32)
+        point_m = np.matmul(distortion, point.T).T
+      # Apply distortion
+        # distortion[0, 0] = np.cos(delay)
+        # distortion[0, 1] = - np.sin(delay)
+        # distortion[1, 0] = np.sin(delay)
+        # distortion[1, 1] = np.cos(delay)
+      # distortion[0, 2] += .05
+      # print(single_column[0, 0:3])
+      # single_column = np.matmul(distortion, single_column.T)
+      # print(single_column[0, 0:3])
+      # beams.append(single_column[:, 0:3])
+      # beams.append(single_column[0:3, :].T)
+        beams[h, w, :] = point_m[0:3]
+        origin[h, w, :] = origin_final * (h + 1) / (360)
+      # delay += .1 / 180. * np.pi
+    beams = np.array(beams).reshape(H * W, -1)
+    return np.ascontiguousarray(beams.astype(np.float32)), np.ascontiguousarray(origin.astype(np.float32))
+
+  def create_rays(self, fov_up, fov_down, H, W):
+
+    # TODO pass beam_angles
+
+    # TODO Option to add noise to angle values
+
+    beams = []
 
     # correct initial rotation of sensor
     initial = 180
@@ -961,6 +1033,12 @@ class MultiSemLaserScan():
     return np.ascontiguousarray(beams.astype(np.float32))
 
   def write(self, out_dir, idx, range_image=False):
+    # write range_image and label_image as pngs
+    # imageio.imwrite(os.path.join(out_dir, "velodyne_png", str(idx).zfill(6) + ".png"),
+    #                 (viridis_colors[..., ::-1] * 255).astype(np.uint8))
+    # imageio.imwrite(os.path.join(out_dir, "labels_png", str(idx).zfill(6) + ".png"),
+    #                 (self.proj_color[..., ::-1] * 255).astype(np.uint8))
+
     if self.adaption == 'cp':  # closest point
       back_points = self.merged.back_points.reshape(-1, 3)
       label_image = self.merged.label_image.reshape(-1)
@@ -973,23 +1051,23 @@ class MultiSemLaserScan():
       remissions = remissions[index]
       label_image = label_image[index].astype(np.int32)
     else:
-    back_points = self.back_points.reshape(-1, 3)
-    label_image = self.label_image.reshape(-1)
+      back_points = self.back_points.reshape(-1, 3)
+      label_image = self.label_image.reshape(-1)
       remissions = self.proj_remissions.reshape(-1)
 
-      index = label_image >= 0  # TODO there should be no -1
+    index = label_image >= 0  # TODO there should be no -1
     back_points = back_points[index]
     remissions = remissions[index]
     label_image = label_image[index].astype(np.int32)
-      keep = np.sum(back_points, axis=1) != 0  # remove points with (0, 0, 0)
-      back_points = back_points[keep]
+    keep = np.sum(back_points, axis=1) != 0  # remove points with (0, 0, 0)
+    back_points = back_points[keep]
     remissions = remissions[keep]
-      label_image = label_image[keep]
+    label_image = label_image[keep]
 
     if self.adaption == 'cp':
       assert(back_points.shape[0] == label_image.shape[0] == remissions.shape[0])
     else:
-    assert(back_points.shape[0] == label_image.shape[0])
+      assert(back_points.shape[0] == label_image.shape[0])
 
     scan_file = open(
         os.path.join(out_dir, "velodyne", str(idx).zfill(6) + ".bin"), "wb")
@@ -1067,7 +1145,7 @@ def compare(scan_source, scan_target):
 
   # Range diff image
   source_range = scan_source.proj_range
-    target_range = scan_target.proj_range
+  target_range = scan_target.proj_range
   # Mask out no data (= black) in target scan
   black = source_range == 0
   # target_range[black] = 0
@@ -1081,7 +1159,7 @@ def compare(scan_source, scan_target):
   # data = self.convert_range(range_diff)
   MSE = range_diff.sum() / range_diff.size
   print("MSE: ", MSE)
-  
+
   source_remissions = scan_source.proj_remissions
   target_remissions = scan_target.proj_remissions
   remissions_diff = (source_remissions - target_remissions) ** 2

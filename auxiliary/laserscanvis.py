@@ -38,10 +38,10 @@ class LaserScanVis():
                                    size=(1600, 600), bgcolor='white')
     self.scan_canvas.events.key_press.connect(self.key_press)
     self.grid_view = self.scan_canvas.central_widget.add_grid()
-    
+
     # source laserscan 3D
     self.scan_view = vispy.scene.widgets.ViewBox(
-      border_color='white', parent=self.scan_canvas.scene)
+        border_color='white', parent=self.scan_canvas.scene)
     self.scan_vis = visuals.Markers()
     self.scan_view.camera = 'turntable'
     self.scan_view.add(self.scan_vis)
@@ -50,14 +50,14 @@ class LaserScanVis():
 
     # target laserscan 3D
     if self.show_target is True:
-    self.back_view = vispy.scene.widgets.ViewBox(
-      border_color='white', parent=self.scan_canvas.scene)
-    self.back_vis = visuals.Markers()
-    self.back_view.camera = 'turntable'
-    self.back_view.camera.link(self.scan_view.camera)
-    self.back_view.add(self.back_vis)
-    visuals.XYZAxis(parent=self.back_view.scene)
-    self.grid_view.add_widget(self.back_view, 0, 1)
+      self.back_view = vispy.scene.widgets.ViewBox(
+          border_color='white', parent=self.scan_canvas.scene)
+      self.back_vis = visuals.Markers()
+      self.back_view.camera = 'turntable'
+      self.back_view.camera.link(self.scan_view.camera)
+      self.back_view.add(self.back_vis)
+      visuals.XYZAxis(parent=self.back_view.scene)
+      self.grid_view.add_widget(self.back_view, 0, 1)
 
     # self.grid_view.padding = 6
 
@@ -81,8 +81,8 @@ class LaserScanVis():
     if self.show_label:
       self.img_view = vispy.scene.widgets.ViewBox(
           border_color='white', parent=self.source_canvas.scene)
-    self.img_vis = visuals.Image(cmap='viridis')
-    self.img_view.add(self.img_vis)
+      self.img_vis = visuals.Image(cmap='viridis')
+      self.img_view.add(self.img_vis)
       self.source_view.add_widget(self.img_view, source_grid_idx, 0)
       source_grid_idx += 1
 
@@ -100,8 +100,8 @@ class LaserScanVis():
       if self.show_label:
         self.test_view = vispy.scene.widgets.ViewBox(
             border_color='white', parent=self.target_canvas.scene)
-    self.test_vis = visuals.Image(cmap='viridis')
-    self.test_view.add(self.test_vis)
+        self.test_vis = visuals.Image(cmap='viridis')
+        self.test_view.add(self.test_vis)
         self.target_view.add_widget(self.test_view, target_grid_idx, 0)
         target_grid_idx += 1
 
@@ -115,10 +115,10 @@ class LaserScanVis():
       source_grid_idx += 1
 
       if self.show_target:
-      self.range_view_target = vispy.scene.widgets.ViewBox(
+        self.range_view_target = vispy.scene.widgets.ViewBox(
             border_color='white', parent=self.target_canvas.scene)
-      self.range_image_target = visuals.Image(cmap='viridis')
-      self.range_view_target.add(self.range_image_target)
+        self.range_image_target = visuals.Image(cmap='viridis')
+        self.range_view_target.add(self.range_image_target)
         self.target_view.add_widget(self.range_view_target, target_grid_idx, 0)
         target_grid_idx += 1
 
@@ -142,35 +142,35 @@ class LaserScanVis():
 
     # 2D canvas for showing difference in range, labels and remissions
     if self.show_diff:
-    self.diff_canvas = SceneCanvas(keys='interactive', show=True,
-                                   title='Difference Range Image',
+      self.diff_canvas = SceneCanvas(keys='interactive', show=True,
+                                     title='Difference Range Image',
                                      size=(self.W[1], self.H[1] * h))
-    self.diff_canvas.events.key_press.connect(self.key_press)
-    self.diff_view = self.diff_canvas.central_widget.add_grid()
+      self.diff_canvas.events.key_press.connect(self.key_press)
+      self.diff_view = self.diff_canvas.central_widget.add_grid()
       grid_idx = 0
 
       # Add label difference
       if self.show_label:
-      self.diff_view_label = vispy.scene.widgets.ViewBox(
-          border_color='white', parent=self.diff_canvas.scene)
-      self.diff_image_label = visuals.Image(cmap='viridis')
-      self.diff_view_label.add(self.diff_image_label)
-      self.diff_view.add_widget(self.diff_view_label, grid_idx, 0)
-      grid_idx += 1
+        self.diff_view_label = vispy.scene.widgets.ViewBox(
+            border_color='white', parent=self.diff_canvas.scene)
+        self.diff_image_label = visuals.Image(cmap='viridis')
+        self.diff_view_label.add(self.diff_image_label)
+        self.diff_view.add_widget(self.diff_view_label, grid_idx, 0)
+        grid_idx += 1
 
       # Add range difference
       if self.show_range:
-    self.diff_view_depth = vispy.scene.widgets.ViewBox(
-      border_color='white', parent=self.diff_canvas.scene)
-    self.diff_image_depth = visuals.Image()
-    self.diff_view_depth.add(self.diff_image_depth)
+        self.diff_view_depth = vispy.scene.widgets.ViewBox(
+            border_color='white', parent=self.diff_canvas.scene)
+        self.diff_image_depth = visuals.Image()
+        self.diff_view_depth.add(self.diff_image_depth)
         self.diff_view.add_widget(self.diff_view_depth, grid_idx, 0)
         grid_idx += 1
 
       # Add remissions difference
       if self.show_remissions:
         self.diff_view_remissions = vispy.scene.widgets.ViewBox(
-      border_color='white', parent=self.diff_canvas.scene)
+            border_color='white', parent=self.diff_canvas.scene)
         self.diff_image_remissions = visuals.Image()
         self.diff_view_remissions.add(self.diff_image_remissions)
         self.diff_view.add_widget(self.diff_view_remissions, grid_idx, 0)
@@ -226,11 +226,11 @@ class LaserScanVis():
       self.range_image_source.update()
       if self.show_target:
         target_range = scan_target.proj_range
-      # target_data = self.convert_range(target_range)
+        # target_data = self.convert_range(target_range)
         # print("target", target_data.max(), target_data.min(), target_data.mean())
-      target_data = target_range
-      self.range_image_target.set_data(target_data)
-      self.range_image_target.update()
+        target_data = target_range
+        self.range_image_target.set_data(target_data)
+        self.range_image_target.update()
 
     if self.show_remissions:
       source_data = scan_source.proj_remissions
@@ -248,18 +248,18 @@ class LaserScanVis():
       self.mesh_vis.update()
 
   def set_diff(self, label_diff, range_diff, remissions_diff, m_iou, m_acc,
-                MSE):
+               MSE):
     """ Update difference images
     """
     if self.show_label:
-    self.diff_image_label.set_data(label_diff[..., ::-1])
-    self.diff_image_label.update()
+      self.diff_image_label.set_data(label_diff[..., ::-1])
+      self.diff_image_label.update()
 
     if self.show_range:
-    data = convert_range(range_diff)
-    self.diff_image_depth.set_data(data)
-    self.diff_image_depth.set_data(range_diff)
-    self.diff_image_depth.update()
+      data = convert_range(range_diff)
+      self.diff_image_depth.set_data(data)
+      self.diff_image_depth.set_data(range_diff)
+      self.diff_image_depth.update()
 
     if self.show_remissions:
       self.diff_image_remissions.set_data(remissions_diff)
