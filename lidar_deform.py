@@ -380,35 +380,35 @@ if __name__ == '__main__':
   choice = "no"
   while True:
     if choice != "change":
-    t0_elapse = time.time()
-    scan = SemLaserScan(beams, W, nclasses, color_dict)
-    scans = MultiSemLaserScan(t_beams, t_W, nscans, nclasses,
-                              ignore_classes, moving_classes,
-                              t_fov_up, t_fov_down, color_dict,
-                              # target_settings
-                              transformation=transformation,
-                              preserve_float=preserve_float,
-                              voxel_size=voxel_size, vol_bnds=voxel_bounds)
-    # open pointcloud
-    scan.open_scan(scan_names[idx], fov_up, fov_down)
-    scan.open_label(label_names[idx])
-    scan.colorize()
-    scan.remove_classes(ignore_classes)
-    scan.do_range_projection(fov_up, fov_down, remove=True)
-    scan.do_label_projection()
+      t0_elapse = time.time()
+      scan = SemLaserScan(beams, W, nclasses, color_dict)
+      scans = MultiSemLaserScan(t_beams, t_W, nscans, nclasses,
+                                ignore_classes, moving_classes,
+                                t_fov_up, t_fov_down, color_dict,
+                                # target_settings
+                                transformation=transformation,
+                                preserve_float=preserve_float,
+                                voxel_size=voxel_size, vol_bnds=voxel_bounds)
+      # open pointcloud
+      scan.open_scan(scan_names[idx], fov_up, fov_down)
+      scan.open_label(label_names[idx])
+      scan.colorize()
+      scan.remove_classes(ignore_classes)
+      scan.do_range_projection(fov_up, fov_down, remove=True)
+      scan.do_label_projection()
 
-    # open multiple scans
-    scans.open_multiple_scans(scan_names, label_names, poses, idx)
+      # open multiple scans
+      scans.open_multiple_scans(scan_names, label_names, poses, idx)
 
-    # run approach
-    verts, verts_colors, faces = scans.deform(adaption, poses, idx)
-    if t_beams == beams and t_W == W:
+      # run approach
+      verts, verts_colors, faces = scans.deform(adaption, poses, idx)
+      if t_beams == beams and t_W == W:
         label_diff, range_diff, rem_diff, m_iou, m_acc, MSE = \
             compare(scan, scans)
-      if FLAGS.batch is False:
+        if FLAGS.batch is False:
           vis.set_diff(label_diff, range_diff, rem_diff, m_iou, m_acc, MSE)
-    s = time.time() - t0_elapse
-    print("Took: %.2fs" % (s))
+      s = time.time() - t0_elapse
+      print("Took: %.2fs" % (s))
 
     if FLAGS.batch is False:
       # pass to visualizer
