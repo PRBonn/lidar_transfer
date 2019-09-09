@@ -5,6 +5,7 @@ import os
 import time
 import yaml
 import numpy as np
+from shutil import copy2
 from auxiliary.laserscan import *
 from auxiliary.laserscanvis import LaserScanVis
 
@@ -136,11 +137,14 @@ if __name__ == '__main__':
   print("*" * 80)
   print("INTERFACE:")
   print("Dataset", FLAGS.dataset)
-  print("Config", FLAGS.config)
+  print("Source config", FLAGS.config)
   print("Sequence", FLAGS.sequence)
-  print("Target", FLAGS.target)
-  print("offset", FLAGS.offset)
-  print("batch mode", FLAGS.batch)
+  print("Target config", FLAGS.target)
+  print("Offset", FLAGS.offset)
+  print("Output", FLAGS.output)
+  print("Batch mode", FLAGS.batch)
+  print("Write mode", FLAGS.write)
+  print("One_scan mode", FLAGS.one_scan)
   print("*" * 80)
 
   # open config file
@@ -219,14 +223,16 @@ if __name__ == '__main__':
   # check that there are same amount of labels and scans
   assert(len(label_names) == len(scan_names))
 
+  print("*" * 80)
+
   # read config.yaml of dataset
   try:
     scan_config_path = os.path.join(FLAGS.dataset, "config.yaml")
-    print("Opening config file", scan_config_path)
+    print("Opening source config file", scan_config_path)
     scan_config = yaml.safe_load(open(scan_config_path, 'r'))
   except Exception as e:
     print(e)
-    print("Error opening config.yaml file %s." % scan_config_path)
+    print("Error opening source config.yaml file %s." % scan_config_path)
     quit()
 
   # read calib.txt of dataset
@@ -281,6 +287,7 @@ if __name__ == '__main__':
   try:
     if FLAGS.target == '':
       FLAGS.target = scan_config_path
+      print("Use source as target!")
     print("Opening target config file", FLAGS.target)
     target_config = yaml.safe_load(open(FLAGS.target, 'r'))
   except Exception as e:
@@ -347,6 +354,8 @@ if __name__ == '__main__':
   # create a scan
   color_dict = CFG["color_map"]
   nclasses = len(color_dict)
+
+  config_saved = False
 
   # create a visualizer
   if FLAGS.batch is False:
@@ -429,10 +438,17 @@ if __name__ == '__main__':
         print("\nAdaption method not recognized or not defined")
         quit()
 
-    # Export backprojected point cloud (+ range image)
-    # TODO write config to export path
+    # Export backprojected point cloud
     if FLAGS.write:
       scans.write(out_path, idx)
+
+      # write config to export path
+      if not config_saved:
+        copy2(FLAGS.target, out_path)
+        print("Target config", FLAGS.target, "copied to", out_path)
+        copy2(FLAGS.config, out_path)
+        print("Config", FLAGS.config, "copied to", out_path)
+        config_saved = True
 
     if FLAGS.one_scan:
       quit()
