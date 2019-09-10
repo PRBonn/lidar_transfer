@@ -140,7 +140,7 @@ class LaserScan:
     # self.do_range_projection(fov_up, fov_down)
 
   def remove_points(self, keep_index):
-    """ Remove points by passing a boolean index of those to keep and 
+    """ Remove points by passing a boolean index of those to keep and
         removes all others.
     """
     self.points = self.points[keep_index]
@@ -151,14 +151,14 @@ class LaserScan:
 
     # TODO add pinhole projection?
 
-  def create_restricted_dataset(self, fov_up, fov_down,
-                                fov_up_lim, fov_down_lim, idx, out_dir):
+  def create_restricted_dataset(self, fov_up, fov_down, fov_up, fov_down, idx,
+                                out_dir):
     """ Project a pointcloud into a spherical projection image.projection.
         Function takes two arguments.
     """
     # laser parameters
-    fov_up_lim = fov_up_lim / 180.0 * np.pi      # field of view up in radians
-    fov_down_lim = fov_down_lim / 180.0 * np.pi  # field of view down in radians
+    fov_up = fov_up / 180.0 * np.pi      # field of view up in radians
+    fov_down = fov_down / 180.0 * np.pi  # field of view down in radians
 
     # get depth of all points
     depth = np.linalg.norm(self.points, 2, axis=1)
@@ -167,9 +167,9 @@ class LaserScan:
     pitch = np.arcsin(self.points[:, 2] / depth)
 
     # Discard all pitch values outside of frustrum
-    valid = np.bitwise_and(pitch <= fov_up_lim / 180.0 * np.pi,
-                           pitch >= fov_down_lim / 180.0 * np.pi)
-  
+    valid = np.bitwise_and(pitch <= fov_up / 180.0 * np.pi,
+                           pitch >= fov_down / 180.0 * np.pi)
+
     # Copy subset of valid points only
     points = np.copy(self.points[valid])
     remissions = np.copy(self.remissions[valid]).reshape(-1)
@@ -177,7 +177,7 @@ class LaserScan:
 
     print("Remove: ", 100 - int(np.sum(valid) / valid.size * 100), "%,",
           valid.size - np.sum(valid), "of", valid.size, "points")
-  
+
     # save points + remissions
     scan_file = open(
         os.path.join(out_dir, "velodyne", str(idx).zfill(6) + ".bin"), "wb")
@@ -963,7 +963,7 @@ class MultiSemLaserScan():
                                       self.scans[0].color_lut)
 
       # proj_color    H x W x 3   [0,1]   -> colors for projected label image
-      # label_color   back x 3    [0,1]   -> same as above, but same dim as points
+      # label_color   back x 3    [0,1]   -> same as above, same dim as points
       # label         H x W x 1   [0,259] -> label index for export
       #     label_image   H x W x 1   [0,259] -> same as above but image dims
       # colors        verts x 3   [0,1]   -> colors for mesh visualisation
@@ -1012,6 +1012,7 @@ class MultiSemLaserScan():
     origin = np.zeros((H, W, 3)).astype(np.float32)
     origin_final = np.array([0, 1, 0]).astype(np.float32)
     # correct initial rotation of sensor
+    # TODO expose parameter
     initial = 180
     yaw_angles = (np.linspace(0, 360, W) + initial)
     larger = yaw_angles > 360
@@ -1051,7 +1052,8 @@ class MultiSemLaserScan():
         origin[h, w, :] = origin_final * (h + 1) / (360)
       # delay += .1 / 180. * np.pi
     beams = np.array(beams).reshape(H * W, -1)
-    return np.ascontiguousarray(beams.astype(np.float32)), np.ascontiguousarray(origin.astype(np.float32))
+    return np.ascontiguousarray(beams.astype(np.float32)), \
+        np.ascontiguousarray(origin.astype(np.float32))
 
   def create_rays(self, fov_up, fov_down, H, W):
 
@@ -1082,12 +1084,15 @@ class MultiSemLaserScan():
     beams = np.array(beams).reshape(W * H, -1)
     return np.ascontiguousarray(beams.astype(np.float32))
 
-  def write(self, out_dir, idx, range_image=False):
+  def write(self, out_dir, idx, write_png=False):
     # write range_image and label_image as pngs
-    # imageio.imwrite(os.path.join(out_dir, "velodyne_png", str(idx).zfill(6) + ".png"),
-    #                 (viridis_colors[..., ::-1] * 255).astype(np.uint8))
-    # imageio.imwrite(os.path.join(out_dir, "labels_png", str(idx).zfill(6) + ".png"),
-    #                 (self.proj_color[..., ::-1] * 255).astype(np.uint8))
+    if write_png:
+      imageio.imwrite(
+          os.path.join(out_dir, "velodyne_png", str(idx).zfill(6) + ".png"),
+          (viridis_colors[..., ::-1] * 255).astype(np.uint8))
+      imageio.imwrite(
+          os.path.join(out_dir, "labels_png", str(idx).zfill(6) + ".png"),
+          (self.proj_color[..., ::-1] * 255).astype(np.uint8))
 
     if self.adaption == 'cp':  # closest point
       back_points = self.merged.back_points.reshape(-1, 3)
@@ -1115,7 +1120,8 @@ class MultiSemLaserScan():
     label_image = label_image[keep]
 
     if self.adaption == 'cp':
-      assert(back_points.shape[0] == label_image.shape[0] == remissions.shape[0])
+      assert(back_points.shape[0] == label_image.shape[0] ==
+             remissions.shape[0])
     else:
       assert(back_points.shape[0] == label_image.shape[0])
 
