@@ -113,6 +113,7 @@ if __name__ == '__main__':
     label_names.sort()
 
     # check that there are same amount of labels and scans
+    print("Scans", len(scan_names), ", Labels", len(label_names))
     assert(len(label_names) == len(scan_names))
 
   # read config.yaml of dataset
@@ -203,6 +204,8 @@ if __name__ == '__main__':
     # pass to visualizer!
     vis.frame = idx
     vis.set_title()
+    if FLAGS.ignore_semantics:
+      vis.view_mode = "range"
     vis.set_source_scan(scan)
     vis.set_source_3d(scan)
     if FLAGS.ignore_semantics is False:

@@ -195,6 +195,7 @@ class LaserScanVis():
     # plot 2D images
     if self.show_label:
       self.img_vis.set_data(scan.proj_color[..., ::-1])
+      self.img_vis.update()
     if self.show_range:
       data = convert_range(scan.proj_range)
       self.range_image_source.set_data(data)
@@ -202,7 +203,6 @@ class LaserScanVis():
       # data = convert_range(scan.proj_remissions)
       data = scan.proj_remissions
       self.remissions_image_source.set_data(data)
-    self.img_vis.update()
 
   def set_data(self, scan_source, scan_target, verts=None, verts_colors=None,
                faces=None, W=None, H=None):
