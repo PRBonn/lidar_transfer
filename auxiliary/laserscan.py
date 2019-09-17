@@ -151,8 +151,7 @@ class LaserScan:
 
     # TODO add pinhole projection?
 
-  def create_restricted_dataset(self, fov_up, fov_down, fov_up, fov_down, idx,
-                                out_dir):
+  def create_restricted_dataset(self, fov_up, fov_down, idx, out_dir, label=True):
     """ Project a pointcloud into a spherical projection image.projection.
         Function takes two arguments.
     """
@@ -167,13 +166,14 @@ class LaserScan:
     pitch = np.arcsin(self.points[:, 2] / depth)
 
     # Discard all pitch values outside of frustrum
-    valid = np.bitwise_and(pitch <= fov_up / 180.0 * np.pi,
-                           pitch >= fov_down / 180.0 * np.pi)
+    valid = np.bitwise_and(pitch <= fov_up,
+                           pitch >= fov_down)
 
     # Copy subset of valid points only
     points = np.copy(self.points[valid])
     remissions = np.copy(self.remissions[valid]).reshape(-1)
-    label_image = np.copy(self.label[valid]).reshape(-1)
+    if label:
+      label_image = np.copy(self.label[valid]).reshape(-1)
 
     print("Remove: ", 100 - int(np.sum(valid) / valid.size * 100), "%,",
           valid.size - np.sum(valid), "of", valid.size, "points")
@@ -189,13 +189,14 @@ class LaserScan:
     scan_file.close()
 
     # write labels
-    label_file = open(
-        os.path.join(out_dir, "labels", str(idx).zfill(6) + ".label"), "wb")
-    for label in label_image:
-      # print(label.dtype, label.shape, label.astype(np.int32))
-      byte_values = struct.pack("I", label)
-      label_file.write(byte_values)
-    label_file.close()
+    if label:
+      label_file = open(
+          os.path.join(out_dir, "labels", str(idx).zfill(6) + ".label"), "wb")
+      for label in label_image:
+        # print(label.dtype, label.shape, label.astype(np.int32))
+        byte_values = struct.pack("I", label)
+        label_file.write(byte_values)
+      label_file.close()
 
   def do_range_projection(self, fov_up, fov_down, remove=False):
     """ Project a pointcloud into a spherical projection image.projection.

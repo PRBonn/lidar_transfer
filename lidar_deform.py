@@ -401,7 +401,7 @@ if __name__ == '__main__':
       # open pointcloud
       scan.open_scan(scan_names[idx], fov_up, fov_down)
       scan.open_label(label_names[idx])
-      # scan.create_restricted_dataset(fov_up, fov_down, 3, -25, idx, "")
+      # scan.create_restricted_dataset(3, -25, idx, "", label=False)
       scan.colorize()
       scan.remove_classes(ignore_classes)
       scan.do_range_projection(fov_up, fov_down, remove=True)
