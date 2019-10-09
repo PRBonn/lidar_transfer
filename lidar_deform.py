@@ -227,12 +227,12 @@ if __name__ == '__main__':
 
   # read config.yaml of dataset
   try:
-    scan_config_path = os.path.join(FLAGS.dataset, "config.yaml")
-    print("Opening source config file", scan_config_path)
-    scan_config = yaml.safe_load(open(scan_config_path, 'r'))
+    source_config_path = os.path.join(FLAGS.dataset, "config.yaml")
+    print("Opening source config file", source_config_path)
+    source_config = yaml.safe_load(open(source_config_path, 'r'))
   except Exception as e:
     print(e)
-    print("Error opening source config.yaml file %s." % scan_config_path)
+    print("Error opening source config.yaml file %s." % source_config_path)
     quit()
 
   # read calib.txt of dataset
@@ -258,16 +258,16 @@ if __name__ == '__main__':
   poses = parse_poses(poses_file, calib)
 
   # additional parameter
-  name = scan_config['name']
-  # projection = scan_config['projection']
-  fov_up = scan_config['fov_up']
-  fov_down = scan_config['fov_down']
+  name = source_config['name']
+  # projection = source_config['projection']
+  fov_up = source_config['fov_up']
+  fov_down = source_config['fov_down']
   # TODO change to more general description height?
-  beams = scan_config['beams']
-  angle_res_hor = scan_config['angle_res_hor']
-  fov_hor = scan_config['fov_hor']
+  beams = source_config['beams']
+  angle_res_hor = source_config['angle_res_hor']
+  fov_hor = source_config['fov_hor']
   try:
-    beam_angles = scan_config['beam_angles']
+    beam_angles = source_config['beam_angles']
     beam_angles.sort()
   except Exception as e:
     print("No beam angles in scan config: calculate equidistant angles")
@@ -286,7 +286,7 @@ if __name__ == '__main__':
   # read config.yaml of target dataset
   try:
     if FLAGS.target == '':
-      FLAGS.target = scan_config_path
+      FLAGS.target = source_config_path
       print("Use source as target!")
     print("Opening target config file", FLAGS.target)
     target_config = yaml.safe_load(open(FLAGS.target, 'r'))
@@ -391,14 +391,12 @@ if __name__ == '__main__':
     if choice != "change":
       t0_elapse = time.time()
       scan = SemLaserScan(beams, W, nclasses, color_dict)
-      scans = MultiSemLaserScan(t_beams, t_W, nscans, nclasses,
-                                ignore_classes, moving_classes,
-                                t_fov_up, t_fov_down, color_dict,
-                                # target_settings
+      scans = MultiSemLaserScan(source_config, target_config, nscans, nclasses,
+                                ignore_classes, moving_classes, color_dict,
                                 transformation=transformation,
                                 preserve_float=preserve_float,
                                 voxel_size=voxel_size, vol_bnds=voxel_bounds)
-      # open pointcloud
+      # open single source scan for reference
       scan.open_scan(scan_names[idx], fov_up, fov_down)
       scan.open_label(label_names[idx])
       # scan.create_restricted_dataset(3, -25, idx, "", label=False)
@@ -407,7 +405,7 @@ if __name__ == '__main__':
       scan.do_range_projection(fov_up, fov_down, remove=True)
       scan.do_label_projection()
 
-      # open multiple scans
+      # open multiple source scans
       scans.open_multiple_scans(scan_names, label_names, poses, idx)
 
       # run approach
