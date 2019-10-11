@@ -31,7 +31,8 @@ class TSDFVolume(object):
     self._trunc_margin = self._voxel_size * 5  # truncation on SDF
 
     # Adjust volume bounds
-    self._vol_dim = np.ceil((self._vol_bnds[:, 1] - self._vol_bnds[:, 0]) / self._voxel_size).copy(order='C').astype(int)  # ensure C-order contigous
+    self._vol_dim = np.ceil((self._vol_bnds[:, 1] - self._vol_bnds[:, 0]) /
+                            self._voxel_size).copy(order='C').astype(int)  # ensure C-order contigous
     self._vol_bnds[:, 1] = self._vol_bnds[:, 0] + self._vol_dim * self._voxel_size
     self._vol_origin = self._vol_bnds[:, 0].copy(order='C').astype(np.float32)  # ensure C-order contigous
     print("Voxel volume size: %d x %d x %d" % (self._vol_dim[0], self._vol_dim[1], self._vol_dim[2]))
@@ -129,10 +130,10 @@ class TSDFVolume(object):
           if (pitch > fov_up || pitch < fov_down)
               return;
 
-          float proj_x = 0.5 * (yaw / PI + 1.0);                // in [0.0, 1.0]
-          float proj_y = 1.0 - (pitch + fabs(fov_down)) / fov;  // in [0.0, 1.0]
-          proj_x *= im_w;                                       // in [0.0, W]
-          proj_y *= im_h;                                       // in [0.0, H]
+          float proj_x = 0.5 * (yaw / PI + 1.0);                // in [0, 1]
+          float proj_y = 1.0 - (pitch + fabs(fov_down)) / fov;  // in [0, 1]
+          proj_x *= im_w;                                       // in [0, W]
+          proj_y *= im_h;                                       // in [0, H]
 
           int proj_x_cl = floor(proj_x);
           proj_x_cl = min(im_w - 1, proj_x_cl);
@@ -217,7 +218,8 @@ class TSDFVolume(object):
 
     # Fold RGB color image into a single channel image
     color_im = color_im.astype(np.float32)
-    # color_im = np.floor(color_im[:,:,2]*256*256+color_im[:,:,1]*256+color_im[:,:,0])
+    # color_im = np.floor(color_im[:, :, 2] * 256 * 256 +
+    #                     color_im[:, :, 1] * 256 + color_im[:, :, 0])
     color_im = np.floor(color_im[:, :, 0] * 256 * 256 +
                         color_im[:, :, 1] * 256 + color_im[:, :, 2])
 
@@ -320,7 +322,8 @@ class TSDFVolume(object):
                                      vox_coords[2, valid_pts]]
       self._tsdf_vol_cpu[vox_coords[0, valid_pts],
                          vox_coords[1, valid_pts],
-                         vox_coords[2, valid_pts]] = np.divide(np.multiply(tsdf_vals, w_old) + dist[valid_pts], w_new)
+                         vox_coords[2, valid_pts]] = \
+          np.divide(np.multiply(tsdf_vals, w_old) + dist[valid_pts], w_new)
 
       # Integrate color
       old_color = self._color_vol_cpu[vox_coords[0, valid_pts],
@@ -341,7 +344,8 @@ class TSDFVolume(object):
           np.round(np.divide(np.multiply(old_r, w_old) + new_r, w_new)), 255.)
       self._color_vol_cpu[vox_coords[0, valid_pts],
                           vox_coords[1, valid_pts],
-                          vox_coords[2, valid_pts]] = new_b * 256. * 256. + new_g * 256. + new_r
+                          vox_coords[2, valid_pts]] = \
+          new_b * 256. * 256. + new_g * 256. + new_r
 
       # TODO Integrate remissions for CPU
       # new_rem = np.minimum(np.round(np.divide(np.multiply(old_rem, w_old) + new_rem, w_new)), 255.)
@@ -360,7 +364,8 @@ class TSDFVolume(object):
     tsdf_vol, color_vol, rem_vol = self.get_volume()
 
     # Marching cubes
-    verts, faces, norms, vals = measure.marching_cubes_lewiner(tsdf_vol, level=0)
+    verts, faces, norms, vals = measure.marching_cubes_lewiner(tsdf_vol,
+                                                               level=0)
     verts_ind = np.round(verts).astype(int)
 
     # voxel grid coordinates to world coordinates
@@ -383,7 +388,7 @@ class TSDFVolume(object):
     verts, faces, norms, colors, rem = self.get_mesh(color_lut)
 
     # TODO Expose parameter to write mesh
-    # meshwrite("test.ply",verts,faces,norms,colors)
+    # meshwrite("test.ply", verts, faces, norms, colors*255)
 
     # Arrays must be contiguous and 1D
     verts_c = np.ascontiguousarray(verts.reshape(-1))
@@ -406,7 +411,8 @@ class TSDFVolume(object):
                 ray_colors, range_image, rem_image, H, W)
 
     return ray_endpoints.reshape(-1, 3), ray_colors.reshape(-1, 3), \
-        verts, colors, faces, range_image.reshape(-1, W), rem_image.reshape(-1, W)
+        verts, colors, faces, range_image.reshape(-1, W), \
+        rem_image.reshape(-1, W)
 
 
 # ------------------------------------------------------------------------------
@@ -419,7 +425,7 @@ def meshwrite(filename, verts, faces, norms, colors):
   ply_file = open(filename, 'w')
   ply_file.write("ply\n")
   ply_file.write("format ascii 1.0\n")
-  ply_file.write("element vertex %d\n"%(verts.shape[0]))
+  ply_file.write("element vertex %d\n" % (verts.shape[0]))
   ply_file.write("property float x\n")
   ply_file.write("property float y\n")
   ply_file.write("property float z\n")
@@ -429,7 +435,7 @@ def meshwrite(filename, verts, faces, norms, colors):
   ply_file.write("property uchar red\n")
   ply_file.write("property uchar green\n")
   ply_file.write("property uchar blue\n")
-  ply_file.write("element face %d\n"%(faces.shape[0]))
+  ply_file.write("element face %d\n" % (faces.shape[0]))
   ply_file.write("property list uchar int vertex_index\n")
   ply_file.write("end_header\n")
 

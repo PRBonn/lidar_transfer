@@ -151,7 +151,8 @@ class LaserScan:
 
     # TODO add pinhole projection?
 
-  def create_restricted_dataset(self, fov_up, fov_down, idx, out_dir, label=True):
+  def create_restricted_dataset(self, fov_up, fov_down, idx, out_dir,
+                                label=True):
     """ Project a pointcloud into a spherical projection image.projection.
         Function takes two arguments.
     """
@@ -719,29 +720,48 @@ class SemLaserScan(LaserScan):
 class MultiSemLaserScan():
   """Class that contains multiple LaserScans with x,y,z,r,label,color_label"""
 
-  def __init__(self, H, W, nscans, nclasses, ignore_classes, moving_classes,
-               fov_up, fov_down, color_dict=None, transformation=None,
-               beam_angles=None, preserve_float=False,
-               voxel_size=0.1, vol_bnds=None):
-    self.H = H
-    self.W = W
+  def __init__(self, source_config, target_config, nscans, nclasses,
+               ignore_classes, moving_classes, color_dict=None,
+               transformation=None, preserve_float=False, voxel_size=0.1,
+               vol_bnds=None):
+    # source settings
+    self.H = source_config["beams"]
+    self.W = int(source_config["fov_hor"] / source_config["angle_res_hor"])
+    self.fov_up = source_config["fov_up"]
+    self.fov_down = source_config["fov_down"]
+    try:
+      self.beam_angles = source_config['beam_angles']
+      self.beam_angles.sort()
+    except Exception as e:
+      self.beam_angles = None
+
+    # target settings
+    self.t_H = target_config["beams"]
+    self.t_W = int(target_config["fov_hor"] / target_config["angle_res_hor"])
+    self.t_fov_up = target_config["fov_up"]
+    self.t_fov_down = target_config["fov_down"]
+    try:
+      self.t_beam_angles = source_config['beam_angles']
+      self.t_beam_angles.sort()
+    except Exception as e:
+      self.t_beam_angles = None
+
+    # approach settings
     self.nscans = nscans
     self.nclasses = nclasses
     self.ignore_classes = ignore_classes
     self.moving_classes = moving_classes
-    self.fov_up = fov_up
-    self.fov_down = fov_down
     self.color_dict = color_dict
     self.transformation = transformation
-    self.beam_angles = beam_angles
     self.preserve_float = preserve_float
     self.voxel_size = voxel_size
-    self.poses = np.zeros((nscans, 4, 4), dtype=np.float32)
     self.vol_bnds = vol_bnds
+
+    self.poses = np.zeros((nscans, 4, 4), dtype=np.float32)
     self.scans = []
     for n in range(self.nscans):
-      self.scans.append(SemLaserScan(H, W, nclasses, color_dict,
-                        transformation, beam_angles))
+      self.scans.append(SemLaserScan(self.H, self.W, nclasses, color_dict,
+                        transformation, self.beam_angles))
 
     self.reset()
 
@@ -805,9 +825,10 @@ class MultiSemLaserScan():
     # print(self.transformation)
     # different approaches for point cloud adaption
     if adaption == 'cp':  # closest point
-      self.merged = SemLaserScan(self.H, self.W, self.nclasses,
+      # TODO maybe use here self.H instead self.t_H
+      self.merged = SemLaserScan(self.t_H, self.t_W, self.nclasses,
                                  self.color_dict, self.transformation,
-                                 self.beam_angles)
+                                 self.t_beam_angles)
       self.merged.reset()
       self.merged.pose = poses[idx]
 
@@ -822,10 +843,10 @@ class MultiSemLaserScan():
 
         # After accumulating all scans undo the pose and do range projection
       self.merged.apply_inv_pose()
-      self.merged.do_range_projection_new(self.fov_up, self.fov_down,
+      self.merged.do_range_projection_new(self.t_fov_up, self.t_fov_down,
                                           remove=True)
       self.merged.do_label_projection_new()
-      self.merged.do_reverse_projection_new(self.fov_up, self.fov_down,
+      self.merged.do_reverse_projection_new(self.t_fov_up, self.t_fov_down,
                                             preserve_float=self.preserve_float)
 
       # Map from merged to self
@@ -877,15 +898,16 @@ class MultiSemLaserScan():
       fps = self.nscans / (time.time() - t0_elapse)
       print("Average FPS: %.2f" % (fps))
 
-      rays = self.create_rays()
+      rays = self.create_rays(self.t_fov_up, self.t_fov_down,
+                              self.t_H, self.t_W)
       origin = np.array([0, 0, 0]).astype(np.float32)
       t0_elapse = time.time()
       self.back_points, label_color, \
           verts, colors, faces, self.proj_range, rem_image = \
-          tsdf_vol.throw_rays_at_mesh(rays, origin, self.H, self.W,
+          tsdf_vol.throw_rays_at_mesh(rays, origin, self.t_H, self.t_W,
                                       self.scans[0].color_lut)
 
-      self.proj_color = label_color.reshape(self.H, self.W, 3)
+      self.proj_color = label_color.reshape(self.t_H, self.t_W, 3)
       self.label_color = self.scans[0].color_lut[label_color[:, 2]]
       self.label = np.copy(self.proj_color[:, :, 2])
       self.proj_color = self.scans[0].color_lut[self.label]
@@ -897,10 +919,19 @@ class MultiSemLaserScan():
 
     # Adapt mesh from merged scans
     elif adaption == 'mergemesh':
-      # TODO ? use source parameter for range image creation, but for raytracing the target one
+      # When to apply target parameter?
+      # (1) make objects larger and ugly
+      # (2) looks best
+      # (3) range image is streched vertically
+      # (4) small vertical view (at the bottom), when using multiple frames
+
+      # (1)
       self.merged = SemLaserScan(self.H, self.W, self.nclasses,
                                  self.color_dict, self.transformation,
                                  self.beam_angles)
+      # self.merged = SemLaserScan(self.t_H, self.t_W, self.nclasses,
+      #                            self.color_dict, self.transformation,
+      #                            self.t_beam_angles)
       self.merged.reset()
       self.merged.pose = poses[idx]
 
@@ -912,20 +943,15 @@ class MultiSemLaserScan():
         self.merged.label = np.concatenate((self.merged.label, scan.label))
         self.merged.label_color = np.concatenate((self.merged.label_color,
                                                   scan.label_color))
-      print(np.amax(self.merged.points, axis=0))
-      print(np.amin(self.merged.points, axis=0))
+
+      # (2)
       # After accumulating all scans undo the pose and do range projection
       self.merged.apply_inv_pose()
-
-      # TODO maybe apply here transformation or inverse trafo for different sensor position
-      print(self.fov_down, self.fov_up)
-
-      self.merged.do_range_projection_new(self.fov_up, self.fov_down,
+      # self.merged.do_range_projection_new(self.fov_up, self.fov_down,
+      #                                     remove=True)
+      self.merged.do_range_projection_new(self.t_fov_up, self.t_fov_down,
                                           remove=True)
       self.merged.do_label_projection_new()
-
-      print("Merged proj H", self.merged.proj_H)
-      print("self H", self.H)
 
       # Get voxel bounds by examining the complete point cloud
       merged_bnds = np.rint(self.merged.get_bnds()).astype(int)
@@ -936,8 +962,11 @@ class MultiSemLaserScan():
       vol_bnds[:, 1] = np.minimum(vol_bnds[:, 1], merged_bnds[:, 1])
 
       print("Initializing voxel volume...")
+      # (3)
+      # tsdf_vol = fl.TSDFVolume(vol_bnds, voxel_size=self.voxel_size,
+      #                          fov_up=self.fov_up, fov_down=self.fov_down)
       tsdf_vol = fl.TSDFVolume(vol_bnds, voxel_size=self.voxel_size,
-                               fov_up=self.fov_up, fov_down=self.fov_down)
+                               fov_up=self.t_fov_up, fov_down=self.t_fov_down)
 
       t0_elapse = time.time()
       proj_label3 = np.zeros(self.merged.proj_color.shape)
@@ -947,12 +976,12 @@ class MultiSemLaserScan():
       fps = 1.0 / (time.time() - t0_elapse)
       # print("Average FPS: %.2f" % (fps))
 
-      # TODO use now target settings?
-      t_H = int(self.H)
-      t_W = int(self.W)
-      print("target dim:", t_H, t_W)
-      rays = self.create_rays(self.fov_up, self.fov_down, self.H, self.W)
-      # rays, origin = self.create_rays_moving(self.fov_up, self.fov_down, self.H, self.W)
+      print("target dim:", self.t_H, self.t_W)
+      # (4)
+      rays = self.create_rays(self.t_fov_up, self.t_fov_down,
+                              self.t_H, self.t_W)
+      # rays, origin = \
+      #     self.create_rays_moving(self.fov_up, self.fov_down, self.H, self.W)
       # TODO expose origin or use given translation to use as origin
       origin = np.array([0, 0, 0]).astype(np.float32)
       # origin = np.array([0, 0, 0.5]).astype(np.float32)
@@ -960,7 +989,7 @@ class MultiSemLaserScan():
       t0_elapse = time.time()
       self.back_points, label_color, \
           verts, colors, faces, self.proj_range, self.proj_remissions = \
-          tsdf_vol.throw_rays_at_mesh(rays, origin, t_H, t_W,
+          tsdf_vol.throw_rays_at_mesh(rays, origin, self.t_H, self.t_W,
                                       self.scans[0].color_lut)
 
       # proj_color    H x W x 3   [0,1]   -> colors for projected label image
@@ -969,13 +998,16 @@ class MultiSemLaserScan():
       #     label_image   H x W x 1   [0,259] -> same as above but image dims
       # colors        verts x 3   [0,1]   -> colors for mesh visualisation
 
-      self.proj_color = label_color.reshape(t_H, t_W, 3)
+      self.proj_color = label_color.reshape(self.t_H, self.t_W, 3)
       self.label_color = self.merged.color_lut[label_color[:, 2]]
       self.label_image = np.copy(self.proj_color[:, :, 2])
       self.proj_color = self.merged.color_lut[self.label_image]  # [0,1]
       colors = self.merged.color_lut[colors[:, 2]]
       rps = len(rays) / (time.time() - t0_elapse)
       # print("Average Rays per sec: %.2f" % (rps))
+
+      fl.meshwrite("test.ply", verts, faces, verts, colors[..., ::-1] * 255)
+
       return verts, colors, faces
 
     elif adaption == 'catmesh':
@@ -1149,15 +1181,15 @@ def compare(scan_source, scan_target):
   """ Compare two scans by examine labels, range and remissions
   """
   # Label intersection image
-  source_color = scan_source.proj_color
+  source_color = np.copy(scan_source.proj_color)
   # source_label_map = scan_source.get_label_map()
-  source_label = scan_source.proj_label
+  source_label = np.copy(scan_source.proj_label)
 
   if scan_target.adaption == 'cp':
-    target_label = scan_target.merged.proj_label
-    target_color = scan_target.merged.proj_color
+    target_label = np.copy(scan_target.merged.proj_label)
+    target_color = np.copy(scan_target.merged.proj_color)
   else:
-    target_color = scan_target.proj_color
+    target_color = np.copy(scan_target.proj_color)
     target_label = np.copy(scan_target.label_image)
 
   assert(source_color.size == target_color.size)
@@ -1201,24 +1233,68 @@ def compare(scan_source, scan_target):
   print("Acc: ", m_acc)
 
   # Range diff image
-  source_range = scan_source.proj_range
-  target_range = scan_target.proj_range
-  # Mask out no data (= black) in target scan
-  black = source_range == 0
-  # target_range[black] = 0
+  source_range = np.copy(scan_source.proj_range)
+  target_range = np.copy(scan_target.proj_range)
 
-  # Mask out too far data in target scan
-  # too_far = source_range >= 80
-  # source_range[too_far] = 0
-  # target_range[too_far] = 0
+  range_mask_source = False
+  range_mask_far = False
+  range_mask_label = True
+
+  if range_mask_source:
+    # Mask out no data (= black) in target scan
+    black = source_range == 0
+    target_range[black] = 0
+
+  if range_mask_far:
+    # Mask out too far data in target scan
+    too_far = source_range >= 80
+    source_range[too_far] = 0
+    target_range[too_far] = 0
+
+  if range_mask_label:
+    source_range[bg_label] = 0
+    target_range[bg_label] = 0
 
   range_diff = (source_range - target_range) ** 2
   # data = self.convert_range(range_diff)
   MSE = range_diff.sum() / range_diff.size
   print("MSE: ", MSE)
 
-  source_remissions = scan_source.proj_remissions
-  target_remissions = scan_target.proj_remissions
+  remissions_mask_source = False
+  remissions_mask_label = True
+
+  source_remissions = np.copy(scan_source.proj_remissions)
+  target_remissions = np.copy(scan_target.proj_remissions)
+
+  # Mask out no data (= black) in target scan
+  if remissions_mask_source:
+    black = source_remissions == 0
+    target_remissions[black] = 0
+
+  # Use the label mask to even out source and target
+  if remissions_mask_label:
+    source_remissions[bg_label] = 0
+    target_remissions[bg_label] = 0
+
   remissions_diff = (source_remissions - target_remissions) ** 2
+
+  overwrite = False
+
+  # Overwrite data to show how the masks changes the images in visualizer
+  if overwrite:
+    scan_source.proj_color = source_color
+    scan_source.proj_label = source_label
+    if scan_target.adaption == 'cp':
+      scan_target.merged.proj_label = target_label
+      scan_target.merged.proj_color = target_color
+    else:
+      scan_target.proj_color = target_color
+      scan_target.label_image = target_label
+
+    scan_source.proj_range = source_range
+    scan_target.proj_range = target_range
+
+    scan_source.proj_remissions = source_remissions
+    scan_target.proj_remissions = target_remissions
 
   return label_diff, range_diff, remissions_diff, m_iou, m_acc, MSE
