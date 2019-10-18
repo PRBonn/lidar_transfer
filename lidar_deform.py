@@ -71,6 +71,7 @@ def parse_poses(filename, calibration):
 
   return poses
 
+
 if __name__ == '__main__':
   parser = argparse.ArgumentParser("./lidar_deform.py")
   parser.add_argument(

@@ -903,14 +903,14 @@ class MultiSemLaserScan():
       origin = np.array([0, 0, 0]).astype(np.float32)
       t0_elapse = time.time()
       self.back_points, label_color, \
-          verts, colors, faces, self.proj_range, rem_image = \
+          verts, colors, faces, self.proj_range, self.proj_remissions = \
           tsdf_vol.throw_rays_at_mesh(rays, origin, self.t_H, self.t_W,
                                       self.scans[0].color_lut)
 
       self.proj_color = label_color.reshape(self.t_H, self.t_W, 3)
       self.label_color = self.scans[0].color_lut[label_color[:, 2]]
-      self.label = np.copy(self.proj_color[:, :, 2])
-      self.proj_color = self.scans[0].color_lut[self.label]
+      self.label_image = np.copy(self.proj_color[:, :, 2])
+      self.proj_color = self.scans[0].color_lut[self.label_image]
       colors = self.scans[0].color_lut[colors[:, 2]]
 
       rps = len(rays) / (time.time() - t0_elapse)
@@ -1003,6 +1003,7 @@ class MultiSemLaserScan():
       self.label_image = np.copy(self.proj_color[:, :, 2])
       self.proj_color = self.merged.color_lut[self.label_image]  # [0,1]
       colors = self.merged.color_lut[colors[:, 2]]
+
       rps = len(rays) / (time.time() - t0_elapse)
       # print("Average Rays per sec: %.2f" % (rps))
 
