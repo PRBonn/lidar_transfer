@@ -154,38 +154,78 @@ class TSDFVolume(object):
           if (depth_value == 0)
               return;
 
-          // Integrate TSDF
-          float trunc_margin = other_params[4];
-          float depth_diff = depth_value-depth;
-          if (depth_diff < -trunc_margin)
-              return;
-          float dist = fmin(1.0f,depth_diff/trunc_margin);
-          float w_old = weight_vol[voxel_idx];
-          float obs_weight = other_params[5];
-          float w_new = w_old + obs_weight;
-          weight_vol[voxel_idx] = w_new;
-          tsdf_vol[voxel_idx] = (tsdf_vol[voxel_idx]*w_old+dist)/w_new;
+          bool merge = true;
+          if (merge == false) {
+            // Integrate TSDF
+            float trunc_margin = other_params[4];
+            float depth_diff = depth_value-depth;
+            if (depth_diff < -trunc_margin)
+                return;
+            float dist = fmin(1.0f,depth_diff/trunc_margin);
+            float w_old = weight_vol[voxel_idx];
+            float obs_weight = other_params[5];
+            float w_new = w_old + obs_weight;
+            weight_vol[voxel_idx] = w_new;
+            tsdf_vol[voxel_idx] = (tsdf_vol[voxel_idx]*w_old+dist)/w_new;
 
-          // Integrate color
-          float old_color = color_vol[voxel_idx];
-          float old_b = floorf(old_color/(256*256));
-          float old_g = floorf((old_color-old_b*256*256)/256);
-          float old_r = old_color-old_b*256*256-old_g*256;
-          float new_color = color_im[pixel_y*im_w+pixel_x];
-          float new_b = floorf(new_color/(256*256));
-          float new_g = floorf((new_color-new_b*256*256)/256);
-          float new_r = new_color-new_b*256*256-new_g*256;
+            // Integrate color
+            float old_color = color_vol[voxel_idx];
+            float old_b = floorf(old_color/(256*256));
+            float old_g = floorf((old_color-old_b*256*256)/256);
+            float old_r = old_color-old_b*256*256-old_g*256;
+            float new_color = color_im[pixel_y*im_w+pixel_x];
+            float new_b = floorf(new_color/(256*256));
+            float new_g = floorf((new_color-new_b*256*256)/256);
+            float new_r = new_color-new_b*256*256-new_g*256;
 
-          // Color interpolation
-          new_b = fmin(roundf((old_b*w_old+new_b)/w_new),255.0f);
-          new_g = fmin(roundf((old_g*w_old+new_g)/w_new),255.0f);
-          new_r = fmin(roundf((old_r*w_old+new_r)/w_new),255.0f);
-          color_vol[voxel_idx] = new_b*256*256+new_g*256+new_r;
+            // Color interpolation
+            new_b = fmin(roundf((old_b*w_old+new_b)/w_new),255.0f);
+            new_g = fmin(roundf((old_g*w_old+new_g)/w_new),255.0f);
+            new_r = fmin(roundf((old_r*w_old+new_r)/w_new),255.0f);
+            color_vol[voxel_idx] = new_b*256*256+new_g*256+new_r;
 
-          // Integrate remissions
-          float old_rem = rem_vol[voxel_idx];
-          float new_rem = rem_im[pixel_y*im_w+pixel_x];
-          rem_vol[voxel_idx] = (old_rem*w_old+new_rem)/w_new;
+            // Integrate remissions
+            float old_rem = rem_vol[voxel_idx];
+            float new_rem = rem_im[pixel_y*im_w+pixel_x];
+            rem_vol[voxel_idx] = (old_rem*w_old+new_rem)/w_new;
+          } else {
+            // Integrate class-aware TSDF
+            float trunc_margin = other_params[4];
+            float depth_diff = depth_value-depth;
+            if (depth_diff < -trunc_margin)
+                return;
+            float dist = fmin(1.0f,depth_diff/trunc_margin);
+            float dist_old = weight_vol[voxel_idx];
+            float old_color = color_vol[voxel_idx];
+            float new_color = color_im[pixel_y*im_w+pixel_x];
+            // integrate if same class
+            if (old_color == new_color) {
+              float w_old = weight_vol[voxel_idx];
+              float obs_weight = other_params[5];
+              float w_new = w_old + obs_weight;
+              weight_vol[voxel_idx] = w_new;
+              tsdf_vol[voxel_idx] = (tsdf_vol[voxel_idx]*w_old+dist)/w_new;
+
+              // Integrate remissions
+              float old_rem = rem_vol[voxel_idx];
+              float new_rem = rem_im[pixel_y*im_w+pixel_x];
+              rem_vol[voxel_idx] = (old_rem*w_old+new_rem)/w_new;
+            } else {
+              // choose closer observation
+              if (dist < dist_old) {
+                tsdf_vol[voxel_idx] = dist;
+
+                // Color
+                float new_b = floorf(new_color/(256*256));
+                float new_g = floorf((new_color-new_b*256*256)/256);
+                float new_r = new_color-new_b*256*256-new_g*256;
+                color_vol[voxel_idx] = new_b*256*256+new_g*256+new_r;
+
+                // Remissions
+                rem_vol[voxel_idx] = rem_im[pixel_y*im_w+pixel_x];
+              }
+            }
+          }
         }""")
 
       self._cuda_integrate = self._cuda_src_mod.get_function("integrate")
