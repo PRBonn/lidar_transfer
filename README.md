@@ -5,7 +5,7 @@ Transfer SemanticKITTI labeles into other dataset/sensor formats.
 ![Motivation](motivation.svg)
 
 ## Content
-- Convert datasets ([NUSCENES](nuscenes2kitty.py), [FORD](ford2kitty.py), [NCLT](nclt2kitty.py)) to KITTI format
+- Convert datasets ([NUSCENES](auxiliary/convert/nuscenes2kitty.py), [FORD](auxiliary/convert/ford2kitty.py), [NCLT](auxiliary/convert/nclt2kitty.py)) to KITTI format
 - Minimal dataset [minimal.zip](minimal.zip)
 - Visualize with [visualizer.py](visualizer.py)
 - Transfer datasets [lidar_deform.py](lidar_deform.py)
