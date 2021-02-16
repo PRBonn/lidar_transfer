@@ -31,6 +31,17 @@ git apply ../lidar_transfer/vispy_antialias.patch
 pip install -e .
 ```
 
+Finally, you have to compile the ray tracer in `auxiliary/raytracer`, i.e.,
+
+```
+$ cd auxiliary/raytracer/ 
+$ make
+```
+
+</details>
+
+<details>
+
 </details>
 
 <details>
