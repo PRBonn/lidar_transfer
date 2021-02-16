@@ -57,6 +57,8 @@ def parse_poses(filename, calibration):
 
   i = 0
   for line in file:
+    if len(line.strip()) == 0: continue
+    print(line)
     values = [float(v) for v in line.strip().split()]
 
     cur_pose = np.zeros((4, 4))
