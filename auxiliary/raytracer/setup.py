@@ -20,4 +20,4 @@ else:
                   extra_link_args=['-lgomp'],)
 
 setup(name="RayTracerCython",
-      ext_modules = cythonize(ext, language_level="3"))
+      ext_modules = cythonize(ext, language_level=3))
